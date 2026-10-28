@@ -309,9 +309,42 @@ def analyze_single_symbol(query: str) -> Dict[str, Any]:
     ct = ct_map.get(ins_code, {})
     flow = analyze_client_flow(target, ct)
     info = client.get_instrument_info(ins_code)
-    hist = client.get_instrument_history(ins_code, 40)
+    hist = client.get_instrument_history(ins_code, 90)
     tech = compute_technicals(hist, last_price)
     codal = client.get_codal_letters(ticker, limit=4)
+
+    # Check ETF NAV bubble if applicable
+    etf_nav = client.get_etf_nav(ins_code)
+    nav_red = float(etf_nav.get("pRedTran") or info.get("nav") or 0)
+    nav_bubble_pct = round(((last_price - nav_red) / nav_red) * 100.0, 2) if nav_red > 0 and last_price > 0 else None
+
+    # Check Order Book Queue (BestLimits)
+    static_thresh = info.get("staticThreshold", {}) or {}
+    p_max_thresh = float(static_thresh.get("psGelStaMax") or 0)
+    p_min_thresh = float(static_thresh.get("psGelStaMin") or 0)
+    bl = client.get_best_limits(ins_code)
+    queue_status = "🔄 روان و قابل معامله"
+    if bl:
+        row1 = bl[0]
+        bid_p = float(row1.get("pMeDem") or 0)
+        bid_v = float(row1.get("qTitMeDem") or 0)
+        ask_p = float(row1.get("pMeOf") or 0)
+        ask_v = float(row1.get("qTitMeOf") or 0)
+        if ask_v == 0 and bid_v > 0 and (p_max_thresh == 0 or bid_p >= p_max_thresh):
+            queue_status = f"🔒 صف خرید ({round((bid_v * bid_p)/1e10, 1)} میلیارد ت)"
+        elif bid_v == 0 and ask_v > 0 and (p_min_thresh == 0 or ask_p <= p_min_thresh):
+            queue_status = f"🔻 صف فروش ({round((ask_v * ask_p)/1e10, 1)} میلیارد ت)"
+
+    # Check Multi-Day Smart Money Continuity (5 days)
+    ct_hist = client.get_client_type_history(ins_code, days=5)
+    pos_days_5 = 0
+    net_5d_bt = 0.0
+    for dct in ct_hist:
+        nb = (float(dct.get("buy_I_Value") or 0) - float(dct.get("sell_I_Value") or 0)) / 1e10
+        net_5d_bt += nb
+        if nb > 0:
+            pos_days_5 += 1
+    net_5d_bt = round(net_5d_bt, 1)
 
     min_yr = float(info.get("minYear") or 0)
     max_yr = float(info.get("maxYear") or 0)
@@ -329,39 +362,54 @@ def analyze_single_symbol(query: str) -> Dict[str, Any]:
     score = 50
 
     if flow["buyer_power_ratio"] >= 1.5:
-        pros.append(f"قدرت خریدار حقیقی قوی ({flow['buyer_power_ratio']} برابر فروشنده)")
-        score += 15
+        pros.append(f"قدرت خریدار حقیقی قوی امروز ({flow['buyer_power_ratio']} برابر فروشنده)")
+        score += 14
     elif flow["buyer_power_ratio"] < 0.8:
-        cons.append(f"فشار فروش حقیقی (قدرت خریدار به فروشنده: {flow['buyer_power_ratio']})")
+        cons.append(f"فشار فروش حقیقی امروز (قدرت خریدار به فروشنده: {flow['buyer_power_ratio']})")
         score -= 12
 
     if flow["net_real_inflow_b_toman"] > 2.0:
-        pros.append(f"ورود پول هوشمند حقیقی (+{flow['net_real_inflow_b_toman']} میلیارد تومان)")
-        score += 12
+        pros.append(f"ورود پول هوشمند امروز (+{flow['net_real_inflow_b_toman']} میلیارد تومان)")
+        score += 10
     elif flow["net_real_inflow_b_toman"] < -2.0:
-        cons.append(f"خروج پول حقیقی ({flow['net_real_inflow_b_toman']} میلیارد تومان)")
+        cons.append(f"خروج پول حقیقی امروز ({flow['net_real_inflow_b_toman']} میلیارد تومان)")
         score -= 12
+
+    if pos_days_5 >= 3 and net_5d_bt > 0:
+        pros.append(f"تداوم ورود پول هوشمند در ۵ روز اخیر ({pos_days_5} روز مثبت، خالص ۵ روزه: +{net_5d_bt} میلیارد تومان)")
+        score += 10
+    elif pos_days_5 <= 1 and net_5d_bt < -5.0:
+        cons.append(f"خروج پول در روند ۵ روز اخیر ({net_5d_bt} میلیارد تومان در ۵ روز گذشته)")
+        score -= 8
+
+    if nav_bubble_pct is not None:
+        if nav_bubble_pct <= 0.5:
+            pros.append(f"معامله بدون حباب نسبت به ارزش ذاتی NAV (حباب: {nav_bubble_pct:+}%)")
+            score += 10
+        elif nav_bubble_pct > 3.5:
+            cons.append(f"حباب قیمتی بالا نسبت به ارزش ذاتی NAV ({nav_bubble_pct:+}%)؛ خطر تخلیه حباب")
+            score -= 15
 
     if pe_val:
         if 2.0 < pe_val <= 6.8:
             pros.append(f"ارزندگی بنیادی عالی (P/E = {pe_val})")
-            score += 15
+            score += 14
         elif pe_val > 14.0:
             cons.append(f"نسبت P/E بالا ({pe_val}) و ریسک حباب قیمتی")
             score -= 10
 
     rsi = tech.get("rsi_14")
     if rsi:
-        if rsi < 35:
-            pros.append(f"قرارگیری در کف تکنیکالی و اشباع فروش (RSI = {rsi})")
+        if rsi < 33:
+            pros.append(f"قرارگیری در کف تکنیکالی تعدیل‌شده و اشباع فروش (Wilder RSI = {rsi})")
             score += 12
-        elif rsi > 75:
-            cons.append(f"اشباع خرید در کوتاه‌مدت (RSI = {rsi})؛ احتمال استراحت قیمتی")
+        elif rsi > 72:
+            cons.append(f"اشباع خرید در کوتاه‌مدت (Wilder RSI = {rsi})؛ احتمال استراحت قیمتی")
             score -= 8
 
     if vol_surge >= 1.8:
-        pros.append(f"حجم معاملات مشکوک و بالا ({vol_surge} برابر میانگین ۵ روزه)")
-        score += 8
+        pros.append(f"حجم معاملات بالا ({vol_surge} برابر میانگین ۵ روزه)")
+        score += 7
 
     score = max(10, min(99, score))
     if score >= 75:
@@ -380,6 +428,11 @@ def analyze_single_symbol(query: str) -> Dict[str, Any]:
         "last_change_pct": last_change_pct,
         "close_change_pct": close_change_pct,
         "pe": pe_val,
+        "nav_redemption": int(nav_red) if nav_red > 0 else None,
+        "nav_bubble_pct": nav_bubble_pct,
+        "queue_status": queue_status,
+        "pos_days_5": pos_days_5,
+        "net_5d_bt": net_5d_bt,
         "trade_value_b_toman": round(val_rial / 1e10, 1),
         "year_range_pos_pct": year_pos,
         "vol_vs_5d_avg_ratio": vol_surge,
@@ -666,7 +719,7 @@ HTML_PAGE = """<!DOCTYPE html>
               <th>نماد</th>
               <th>قیمت (تومان)</th>
               <th>تغییر</th>
-              <th>ارزش معاملات</th>
+              <th>حباب ذاتی (NAV)</th>
               <th>ورود/خروج پول</th>
               <th>قدرت خریدار</th>
               <th>وضعیت تکنیکال</th>
@@ -686,7 +739,7 @@ HTML_PAGE = """<!DOCTYPE html>
               <th>نماد</th>
               <th>قیمت (تومان)</th>
               <th>تغییر</th>
-              <th>ارزش معاملات</th>
+              <th>حباب ذاتی (NAV)</th>
               <th>ورود/خروج پول</th>
               <th>قدرت خریدار</th>
               <th>وضعیت تکنیکال</th>
@@ -709,7 +762,7 @@ HTML_PAGE = """<!DOCTYPE html>
               <th>نماد</th>
               <th>قیمت (تومان)</th>
               <th>تغییر امروز</th>
-              <th>ارزش معاملات</th>
+              <th>حباب ذاتی (NAV)</th>
               <th>ورود/خروج پول حقیقی</th>
               <th>قدرت خریدار</th>
               <th>وضعیت تکنیکال</th>
@@ -730,7 +783,7 @@ HTML_PAGE = """<!DOCTYPE html>
               <th>حوزه دارایی</th>
               <th>قیمت (تومان)</th>
               <th>تغییر امروز</th>
-              <th>ارزش معاملات</th>
+              <th>حباب ذاتی (NAV)</th>
               <th>ورود/خروج پول</th>
               <th>قدرت خریدار</th>
             </tr>
@@ -745,7 +798,7 @@ HTML_PAGE = """<!DOCTYPE html>
   <div class="card section-mb">
     <h2>
       <span>💎 شکارچی سهام: برترین تک‌سهم‌های بازار امروز (غربال‌شده از بین کل نمادهای بورس و فرابورس)</span>
-      <span class="stat-label">ترکیب: ورود پول حقیقی + P/E ارزنده + تکنیکال + کدال</span>
+      <span class="stat-label">ترکیب: ورود پول + تداوم ۵ روزه + P/E + RSI وایلدر تعدیل‌شده + صف/مظنه + کدال</span>
     </h2>
     <div style="overflow-x: auto;">
       <table id="stocks-table">
@@ -755,12 +808,13 @@ HTML_PAGE = """<!DOCTYPE html>
             <th>نام شرکت</th>
             <th>امتیاز هوش مصنوعی</th>
             <th>قیمت پایانی (تغییر)</th>
+            <th>وضعیت صف/تابلو</th>
             <th>نسبت P/E</th>
-            <th>ورود پول حقیقی</th>
+            <th>ورود پول امروز (تداوم ۵روزه)</th>
             <th>قدرت خریدار</th>
             <th>سرانه خرید</th>
             <th>حجم به میانگین</th>
-            <th>RSI (چارت)</th>
+            <th>Wilder RSI (تعدیل‌شده)</th>
             <th>آخرین اطلاعیه کدال</th>
           </tr>
         </thead>
@@ -986,8 +1040,9 @@ function renderAll() {
       <td>${s.name}</td>
       <td><span class="badge badge-green">${s.final_score || s.score} / 100</span></td>
       <td class="${s.close_change_pct >= 0 ? 'pos' : 'neg'}">${fmt(Math.round(s.last_price/10))} ت (${s.close_change_pct >= 0 ? '+' : ''}${s.close_change_pct}%)</td>
+      <td style="font-size:0.78rem;font-weight:700;">${s.queue_status || '🔄 روان'}</td>
       <td><b>${s.pe || '-'}</b></td>
-      <td class="pos">+${fmt(s.net_real_inflow_b_toman)} میلیارد ت</td>
+      <td class="pos">+${fmt(s.net_real_inflow_b_toman)} م.ت <br><span style="font-size:0.74rem;color:var(--muted)">(${s.inflow_positive_days_of_5 || 1} روز از ۵ روز مثبت)</span></td>
       <td><span class="badge badge-gold">${s.buyer_power_ratio}x</span></td>
       <td>${fmt(s.per_capita_buy_m_toman)} م.ت</td>
       <td>${s.vol_vs_5d_avg_ratio || 1}x</td>
@@ -996,6 +1051,12 @@ function renderAll() {
     </tr>
   `).join('');
 
+  function fmtNavBubble(item) {
+    if (item.nav_bubble_pct === null || item.nav_bubble_pct === undefined) return fmt(item.trade_value_b_toman) + ' م.ت';
+    const cls = item.nav_bubble_pct <= 1.0 ? 'badge-green' : (item.nav_bubble_pct > 3.5 ? 'badge-red' : 'badge-gold');
+    return `<span class="badge ${cls}">${item.nav_bubble_pct > 0 ? '+' : ''}${item.nav_bubble_pct}%</span>`;
+  }
+
   // Gold ETFs Table
   const gBody = document.querySelector('#gold-table tbody');
   gBody.innerHTML = (currentData.gold_etfs || []).map(g => `
@@ -1003,7 +1064,7 @@ function renderAll() {
       <td><b style="color:var(--gold)">${g.ticker}</b></td>
       <td>${fmt(Math.round(g.last_price/10))} ت</td>
       <td class="${g.last_change_pct >= 0 ? 'pos' : 'neg'}">${g.last_change_pct >= 0 ? '+' : ''}${g.last_change_pct}%</td>
-      <td>${fmt(g.trade_value_b_toman)} میلیارد ت</td>
+      <td>${fmtNavBubble(g)}</td>
       <td class="${g.net_real_inflow_b_toman >= 0 ? 'pos' : 'neg'}">${g.net_real_inflow_b_toman >= 0 ? '+' : ''}${fmt(g.net_real_inflow_b_toman)} میلیارد ت</td>
       <td>${g.buyer_power_ratio}x</td>
       <td style="font-size:0.78rem">${g.tech_signal || '-'}</td>
@@ -1017,7 +1078,7 @@ function renderAll() {
       <td><b style="color:#475569">🥈 ${s.ticker}</b></td>
       <td>${fmt(Math.round(s.last_price/10))} ت</td>
       <td class="${s.last_change_pct >= 0 ? 'pos' : 'neg'}">${s.last_change_pct >= 0 ? '+' : ''}${s.last_change_pct}%</td>
-      <td>${fmt(s.trade_value_b_toman)} میلیارد ت</td>
+      <td>${fmtNavBubble(s)}</td>
       <td class="${s.net_real_inflow_b_toman >= 0 ? 'pos' : 'neg'}">${s.net_real_inflow_b_toman >= 0 ? '+' : ''}${fmt(s.net_real_inflow_b_toman)} میلیارد ت</td>
       <td>${s.buyer_power_ratio}x</td>
       <td style="font-size:0.78rem">${s.tech_signal || '-'}</td>
@@ -1031,7 +1092,7 @@ function renderAll() {
       <td><b style="color:#7c3aed">🚀 ${l.ticker}</b></td>
       <td>${fmt(Math.round(l.last_price/10))} ت</td>
       <td class="${l.last_change_pct >= 0 ? 'pos' : 'neg'}">${l.last_change_pct >= 0 ? '+' : ''}${l.last_change_pct}%</td>
-      <td>${fmt(l.trade_value_b_toman)} میلیارد ت</td>
+      <td>${fmtNavBubble(l)}</td>
       <td class="${l.net_real_inflow_b_toman >= 0 ? 'pos' : 'neg'}">${l.net_real_inflow_b_toman >= 0 ? '+' : ''}${fmt(l.net_real_inflow_b_toman)} میلیارد ت</td>
       <td>${l.buyer_power_ratio}x</td>
       <td style="font-size:0.78rem">${l.tech_signal || '-'}</td>
@@ -1046,7 +1107,7 @@ function renderAll() {
       <td><span class="badge" style="background:#fdf2f8;color:#be185d">${sp.category || 'خاص'}</span></td>
       <td>${fmt(Math.round(sp.last_price/10))} ت</td>
       <td class="${sp.last_change_pct >= 0 ? 'pos' : 'neg'}">${sp.last_change_pct >= 0 ? '+' : ''}${sp.last_change_pct}%</td>
-      <td>${fmt(sp.trade_value_b_toman)} میلیارد ت</td>
+      <td>${fmtNavBubble(sp)}</td>
       <td class="${sp.net_real_inflow_b_toman >= 0 ? 'pos' : 'neg'}">${sp.net_real_inflow_b_toman >= 0 ? '+' : ''}${fmt(sp.net_real_inflow_b_toman)} میلیارد ت</td>
       <td>${sp.buyer_power_ratio}x</td>
     </tr>
@@ -1206,10 +1267,10 @@ async function analyzeSymbol() {
         <div style="font-weight:bold;">${d.verdict}</div>
       </div>
       <div class="grid-4" style="margin-bottom:12px;">
-        <div><span class="stat-label">آخرین قیمت / پایانی:</span><br><b>${fmt(Math.round(d.last_price/10))} ت (${d.last_change_pct}%) / پایانی: ${d.close_change_pct}%</b></div>
-        <div><span class="stat-label">ورود/خروج پول حقیقی:</span><br><b class="${d.flow.net_real_inflow_b_toman>=0?'pos':'neg'}">${d.flow.net_real_inflow_b_toman} میلیارد تومان</b> (قدرت خریدار: ${d.flow.buyer_power_ratio}x)</div>
-        <div><span class="stat-label">ارزش‌گذاری و حجم:</span><br><b>P/E: ${d.pe || '-'} | حجم به میانگین ۵ روزه: ${d.vol_vs_5d_avg_ratio}x</b></div>
-        <div><span class="stat-label">چارت و تکنیکال:</span><br><b>RSI(14): ${d.tech.rsi_14 || '-'} | ${d.tech.tech_signal || '-'}</b></div>
+        <div><span class="stat-label">آخرین قیمت / پایانی / وضعیت تابلو:</span><br><b>${fmt(Math.round(d.last_price/10))} ت (${d.last_change_pct}%) / پایانی: ${d.close_change_pct}%</b><br><span style="font-size:0.8rem;color:var(--accent)">${d.queue_status || ''}</span></div>
+        <div><span class="stat-label">ورود پول امروز و تداوم ۵ روزه:</span><br><b class="${d.flow.net_real_inflow_b_toman>=0?'pos':'neg'}">${d.flow.net_real_inflow_b_toman} م.ت</b> (قدرت خریدار: ${d.flow.buyer_power_ratio}x)<br><span style="font-size:0.8rem;color:var(--muted)">تداوم ۵روزه: ${d.pos_days_5 || 0}/5 روز مثبت (خالص: ${d.net_5d_bt || 0} م.ت)</span></div>
+        <div><span class="stat-label">ارزش‌گذاری، حباب NAV و حجم:</span><br><b>P/E: ${d.pe || '-'} | حباب NAV: ${d.nav_bubble_pct !== null && d.nav_bubble_pct !== undefined ? d.nav_bubble_pct + '%' : 'ندارد'}</b><br><span style="font-size:0.8rem;color:var(--muted)">حجم به میانگین ۵ روزه: ${d.vol_vs_5d_avg_ratio}x</span></div>
+        <div><span class="stat-label">چارت و تکنیکال (قیمت تعدیل‌شده):</span><br><b>Wilder RSI(14): ${d.tech.rsi_14 || '-'} | ${d.tech.tech_signal || '-'}</b></div>
       </div>
       <div class="grid-2" style="margin-bottom:0;">
         <div>

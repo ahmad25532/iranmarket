@@ -30,28 +30,81 @@ def clean_html_num(val: str) -> float:
         return 0.0
 
 
+def compute_wilder_rsi(closes: List[float], period: int = 14) -> Optional[float]:
+    """Computes standard Wilder's Smoothed RSI (matching TradingView / Rahavard365)."""
+    if len(closes) < period + 1:
+        return None
+    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    avg_gain = sum(max(d, 0.0) for d in deltas[:period]) / period
+    avg_loss = sum(max(-d, 0.0) for d in deltas[:period]) / period
+
+    for d in deltas[period:]:
+        gain = max(d, 0.0)
+        loss = max(-d, 0.0)
+        avg_gain = ((avg_gain * (period - 1)) + gain) / period
+        avg_loss = ((avg_loss * (period - 1)) + loss) / period
+
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100.0 - (100.0 / (1.0 + rs)), 1)
+
+
+def adjust_historical_closes(history_newest_first: List[Dict[str, Any]]) -> List[float]:
+    """
+    Adjusts daily closing prices backwards for capital increases & cash dividends (DPS)
+    using TSETMC's `priceYesterday` vs the actual previous day's `pClosing`, plus split-gap detection.
+    """
+    if not history_newest_first:
+        return []
+    # Reverse to chronological: index 0 is oldest, index -1 is newest
+    days = [d for d in reversed(history_newest_first) if (d.get("pClosing") or d.get("pDrCotVal"))]
+    if not days:
+        return []
+
+    raw_closes = [float(d.get("pDrCotVal") or d.get("pClosing") or 0) for d in days]
+    # Work backwards from newest to oldest, accumulating adjustment factor
+    n = len(days)
+    adj_closes = [0.0] * n
+    factor = 1.0
+    adj_closes[n - 1] = raw_closes[n - 1]
+
+    for i in range(n - 1, 0, -1):
+        prev_close = float(days[i - 1].get("pClosing") or days[i - 1].get("pDrCotVal") or 0)
+        declared_yesterday = float(days[i].get("priceYesterday") or 0)
+        cur_close = raw_closes[i]
+
+        if prev_close > 0 and declared_yesterday > 0 and abs(declared_yesterday - prev_close) / prev_close > 0.015:
+            # Official TSETMC DPS / Capital-increase adjustment ratio
+            factor *= declared_yesterday / prev_close
+        elif prev_close > 0 and cur_close > 0 and (cur_close / prev_close) < 0.68:
+            # Unrecorded split/capital increase (>32% single-day drop impossible under normal +-10% limits)
+            factor *= cur_close / prev_close
+
+        adj_closes[i - 1] = round(raw_closes[i - 1] * factor, 2)
+
+    return [c for c in adj_closes if c > 0]
+
+
 def compute_series_technicals(closes_chronological: List[float]) -> Dict[str, Any]:
-    """Computes RSI(14), SMA(20), 30-day high/low, and momentum from a chronological price list."""
+    """Computes Wilder's RSI(14), SMA(20), 30-day high/low, and momentum from a chronological price list."""
     closes = [c for c in closes_chronological if c > 0]
     if len(closes) < 15:
         return {"rsi_14": 50.0, "sma_20_diff_pct": 0.0, "change_30d_pct": 0.0, "pos_30d_pct": 50.0}
 
     cur = closes[-1]
-    first = closes[0]
-    chg_30d = ((cur - first) / first * 100.0) if first > 0 else 0.0
+    window_30 = closes[-30:] if len(closes) >= 30 else closes
+    first_30 = window_30[0]
+    chg_30d = ((cur - first_30) / first_30 * 100.0) if first_30 > 0 else 0.0
 
-    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
-    recent = deltas[-14:]
-    avg_gain = sum(d if d > 0 else 0.0 for d in recent) / 14.0
-    avg_loss = sum(-d if d < 0 else 0.0 for d in recent) / 14.0
-    rsi = 100.0 if avg_loss == 0 else (100.0 - (100.0 / (1.0 + (avg_gain / avg_loss))))
+    rsi = compute_wilder_rsi(closes, 14) or 50.0
 
     sma20_slice = closes[-20:] if len(closes) >= 20 else closes
     sma20 = sum(sma20_slice) / len(sma20_slice)
     sma_diff = ((cur - sma20) / sma20 * 100.0) if sma20 > 0 else 0.0
 
-    low_30 = min(closes)
-    high_30 = max(closes)
+    low_30 = min(window_30)
+    high_30 = max(window_30)
     pos_30 = ((cur - low_30) / (high_30 - low_30) * 100.0) if high_30 > low_30 else 50.0
 
     return {
@@ -82,7 +135,7 @@ def fetch_tgju_macro() -> Dict[str, Any]:
     for key, slug in items.items():
         try:
             req = urllib.request.Request(
-                f"https://api.tgju.org/v1/market/indicator/summary-table-data/{slug}?length=30",
+                f"https://api.tgju.org/v1/market/indicator/summary-table-data/{slug}?length=60",
                 headers={"User-Agent": "Mozilla/5.0"},
             )
             r = opener.open(req, timeout=8)
@@ -163,14 +216,23 @@ def fetch_tgju_macro() -> Dict[str, Any]:
                 "sma_20_toman": round(usd_tech.get("sma_20", 0) / 10),
                 "sma_20_diff_pct": usd_tech.get("sma_20_diff_pct", 0),
                 "technical_view": (
-                    f"دلار در ۳۰ روز اخیر +{usd_tech.get('change_30d_pct', 0)}% رشد کرده (از ۲۳۱ به ۲۶۹ هزار تومان) و RSI آن روی {usd_rsi} است. "
+                    f"دلار در ۳۰ روز اخیر {usd_tech.get('change_30d_pct', 0):+}% تغییر داشته "
+                    f"(کف ۳۰ روزه: {round(usd_tech.get('low_30d', 0)/10):,} و سقف ۳۰ روزه: {round(usd_tech.get('high_30d', 0)/10):,} تومان) "
+                    f"و RSI استاندارد وایلدر آن روی {usd_rsi} است. "
                     + (
-                        "به دلیل رشد تند یک‌ماهه، در کوتاه‌مدت در محدوده اشباع خرید قرار دارد و هر خبر مثبتی از مذاکرات قطر می‌تواند باعث اصلاح آن به سمت میانگین ۲۰ روزه شود."
-                        if usd_rsi >= 62
-                        else "در محدوده تعادلی بالای میانگین ۲۰ روزه قرار دارد."
+                        "به دلیل قرارگیری در محدوده اشباع خرید کوتاه‌مدت، حساسیت به اخبار سیاسی بالاست و احتمال اصلاح به سمت میانگین ۲۰ روزه وجود دارد."
+                        if usd_rsi >= 65
+                        else (
+                            "در محدوده اشباع فروش و کف قیمتی کوتاه‌مدت قرار دارد."
+                            if usd_rsi <= 35
+                            else "در محدوده تعادلی نسبت به میانگین ۲۰ روزه معامله می‌شود."
+                        )
                     )
                 ),
-                "fundamental_view": "تورم مهرماه و کسری بودجه کف بنیادی دلار را بالا نگه داشته، اما پیشنهاد جدید آتش‌بس قطر و بن‌بست انتخابات اسرائیل مانع جهش هیجانی جدید در کوتاه‌مدت شده است.",
+                "fundamental_view": (
+                    f"شکاف بین دلار آزاد ({round(usd/10):,} ت) و دلار مستتر در طلای ۱۸ عیار ({round(((gold18_mkt * 31.1034768) / (ons * 0.750)) / 10):,} ت) "
+                    f"معادل {gold_bubble:+}% است. روند میان‌مدت تابع انتظارات تورمی و خروجی مذاکرات دیپلماتیک است."
+                ),
             },
             "ounce_analysis": {
                 "rsi_14": ons_rsi,
@@ -178,58 +240,48 @@ def fetch_tgju_macro() -> Dict[str, Any]:
                 "sma_20_usd": ons_tech.get("sma_20", 0),
                 "sma_20_diff_pct": ons_tech.get("sma_20_diff_pct", 0),
                 "technical_view": (
-                    f"انس جهانی در ۳۰ روز گذشته {ons_tech.get('change_30d_pct', 0)}% تغییر داشته (از سقف ۴,۲۸۴ دلار به ۴,۰۵۹ دلار اصلاح کرده) و با RSI={ons_rsi} "
+                    f"انس جهانی در ۳۰ روز گذشته {ons_tech.get('change_30d_pct', 0):+}% تغییر داشته "
+                    f"(کف ۳۰ روزه: {ons_tech.get('low_30d', 0):,} $ و سقف ۳۰ روزه: {ons_tech.get('high_30d', 0):,} $) و اکنون با RSI={ons_rsi} "
                     + (
-                        "زیر میانگین ۲۰ روزه در فاز اصلاحی/استراحت است."
+                        f"زیر میانگین ۲۰ روزه ({ons_tech.get('sma_20', 0)} $) در فاز اصلاحی/استراحت است."
                         if ons_tech.get("sma_20_diff_pct", 0) < 0
-                        else "در فاز برگشت صعودی بالای میانگین ۲۰ روزه است."
+                        else f"بالای میانگین ۲۰ روزه ({ons_tech.get('sma_20', 0)} $) در روند صعودی قرار دارد."
                     )
                 ),
-                "fundamental_view": "انتخابات میان‌دوره‌ای آمریکا (۶ روز دیگر) و نوسان شاخص دلار جهانی، انس طلا را موقتاً از سقف تاریخی دور کرده است.",
+                "fundamental_view": (
+                    f"موقعیت فعلی انس در {ons_tech.get('pos_30d_pct', 50)}% بازه یک‌ماهه خود قرار دارد و همبستگی مستقیم با نوسانات شاخص دلار جهانی و ریسک‌های ژئوپلیتیک دارد."
+                ),
             },
         }
     return result
 
 
 def compute_technicals(history: List[Dict[str, Any]], current_price: float) -> Dict[str, Any]:
-    """Computes 14-day RSI, SMA-20 distance, and recent support/resistance from daily closing prices."""
+    """Computes Wilder's 14-day RSI (on adjusted closes), SMA-20 distance, and technical signal."""
     if not history or len(history) < 15:
         return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص"}
 
-    # history is ordered newest to oldest; reverse it to chronological order
-    closes = [float(d.get("pDrCotVal") or d.get("pClosing") or 0) for d in reversed(history)]
-    closes = [c for c in closes if c > 0]
+    closes = adjust_historical_closes(history)
     if current_price > 0:
-        closes.append(current_price)
+        if not closes or abs(current_price - closes[-1]) / max(closes[-1], 1) <= 0.25:
+            closes.append(current_price)
 
     if len(closes) < 15:
         return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص"}
 
-    # Calculate 14-period RSI
-    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
-    recent_deltas = deltas[-14:]
-    gains = [d if d > 0 else 0.0 for d in recent_deltas]
-    losses = [-d if d < 0 else 0.0 for d in recent_deltas]
-    avg_gain = sum(gains) / 14.0
-    avg_loss = sum(losses) / 14.0
+    rsi = compute_wilder_rsi(closes, 14)
+    if rsi is None:
+        return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص"}
 
-    if avg_loss == 0:
-        rsi = 100.0
-    else:
-        rs = avg_gain / avg_loss
-        rsi = 100.0 - (100.0 / (1.0 + rs))
-
-    # SMA 20
     sma20_window = closes[-20:] if len(closes) >= 20 else closes
     sma20 = sum(sma20_window) / len(sma20_window)
-    sma20_diff_pct = ((current_price - sma20) / sma20 * 100.0) if sma20 > 0 else 0.0
+    sma20_diff_pct = ((closes[-1] - sma20) / sma20 * 100.0) if sma20 > 0 else 0.0
 
-    # Determine signal
-    if rsi < 35:
+    if rsi < 33:
         signal = "🟢 کف تکنیکالی (اشباع فروش)"
-    elif 35 <= rsi <= 58 and sma20_diff_pct >= 0:
+    elif 33 <= rsi <= 60 and sma20_diff_pct >= 0:
         signal = "🚀 روند صعودی سالم (مناسب ورود)"
-    elif 58 < rsi <= 70:
+    elif 60 < rsi <= 70:
         signal = "📈 مومنتوم قوی (نزدیک مقاومت)"
     elif rsi > 70:
         signal = "⚠️ اشباع خرید (احتمال اصلاح کوتاه‌مدت)"
@@ -600,11 +652,11 @@ def run_comprehensive_scan() -> Dict[str, Any]:
 
     top_stocks = stock_candidates[:10]
 
-    # Enrich Top ETFs across Gold, Silver, Leveraged, and Special with Technicals
-    for etf_item in gold_etfs[:5] + silver_etfs[:5] + leveraged_etfs[:5] + sector_special_etfs[:5]:
+    # Enrich Top ETFs across Gold, Silver, Leveraged, and Special with Technicals + Official Redemption NAV Bubble!
+    for etf_item in gold_etfs[:6] + silver_etfs[:6] + leveraged_etfs[:6] + sector_special_etfs[:6]:
         try:
             info = client.get_instrument_info(etf_item["insCode"])
-            hist = client.get_instrument_history(etf_item["insCode"], 35)
+            hist = client.get_instrument_history(etf_item["insCode"], 90)
             tech = compute_technicals(hist, etf_item["last_price"])
             etf_item.update(tech)
             min_yr = float(info.get("minYear") or 0)
@@ -613,14 +665,24 @@ def run_comprehensive_scan() -> Dict[str, Any]:
                 etf_item["year_range_pos_pct"] = round(
                     ((etf_item["last_price"] - min_yr) / (max_yr - min_yr)) * 100.0, 1
                 )
+
+            # Official ETF NAV from /api/Fund/GetETFByInsCode/{insCode}
+            etf_nav_data = client.get_etf_nav(etf_item["insCode"])
+            nav_red = float(etf_nav_data.get("pRedTran") or info.get("nav") or 0)
+            if nav_red > 0 and etf_item["last_price"] > 0:
+                nav_bubble = round(((etf_item["last_price"] - nav_red) / nav_red) * 100.0, 2)
+                etf_item["nav_redemption"] = int(nav_red)
+                etf_item["nav_bubble_pct"] = nav_bubble
+                if nav_bubble > 3.5:
+                    etf_item["tech_signal"] = f"⚠️ حباب بالا ({nav_bubble:+}%) | {etf_item.get('tech_signal', '')}"
         except Exception:
             pass
 
-    # Enrich Top 10 Stocks with Technicals (RSI, SMA20, Volume Surge) + Codal Reports!
+    # Enrich Top 10 Stocks with Technicals (Wilder RSI, Adjusted Prices) + Multi-Day Flow + OrderBook Queue + Codal!
     for st in top_stocks:
         try:
             info = client.get_instrument_info(st["insCode"])
-            hist = client.get_instrument_history(st["insCode"], 35)
+            hist = client.get_instrument_history(st["insCode"], 90)
             tech = compute_technicals(hist, st["last_price"])
             st.update(tech)
 
@@ -628,6 +690,9 @@ def run_comprehensive_scan() -> Dict[str, Any]:
             max_yr = float(info.get("maxYear") or 0)
             avg_vol_5d = float(info.get("qTotTran5JAvg") or 0)
             sector_pe = info.get("eps", {}).get("sectorPE")
+            static_thresh = info.get("staticThreshold", {}) or {}
+            p_max_thresh = float(static_thresh.get("psGelStaMax") or 0)
+            p_min_thresh = float(static_thresh.get("psGelStaMin") or 0)
 
             if max_yr > min_yr > 0:
                 st["year_range_pos_pct"] = round(
@@ -639,68 +704,147 @@ def run_comprehensive_scan() -> Dict[str, Any]:
                 st["vol_vs_5d_avg_ratio"] = 1.0
             st["sector_pe"] = round(float(sector_pe), 1) if sector_pe else None
 
-            # Fetch latest Codal letters for this symbol
+            # 1. Check 5-level Order Book (BestLimits) for Buy Queue / Sell Queue status
+            bl = client.get_best_limits(st["insCode"])
+            queue_status = "🔄 روان و قابل معامله"
+            is_locked_buy_queue = False
+            if bl:
+                row1 = bl[0]
+                bid_p = float(row1.get("pMeDem") or 0)
+                bid_v = float(row1.get("qTitMeDem") or 0)
+                ask_p = float(row1.get("pMeOf") or 0)
+                ask_v = float(row1.get("qTitMeOf") or 0)
+                if ask_v == 0 and bid_v > 0 and (p_max_thresh == 0 or bid_p >= p_max_thresh):
+                    queue_val_bt = round((bid_v * bid_p) / 1e10, 1)
+                    queue_status = f"🔒 صف خرید ({queue_val_bt} م.ت)"
+                    is_locked_buy_queue = True
+                elif bid_v == 0 and ask_v > 0 and (p_min_thresh == 0 or ask_p <= p_min_thresh):
+                    queue_val_bt = round((ask_v * ask_p) / 1e10, 1)
+                    queue_status = f"🔻 صف فروش ({queue_val_bt} م.ت)"
+            st["queue_status"] = queue_status
+
+            # 2. Check Multi-Day Smart Money Continuity (Last 5 trading days from GetClientTypeHistory)
+            ct_hist = client.get_client_type_history(st["insCode"], days=5)
+            pos_inflow_days = 0
+            five_day_net_inflow_bt = 0.0
+            for day_ct in ct_hist:
+                b_val = float(day_ct.get("buy_I_Value") or 0)
+                s_val = float(day_ct.get("sell_I_Value") or 0)
+                net_bt = (b_val - s_val) / 1e10
+                five_day_net_inflow_bt += net_bt
+                if net_bt > 0:
+                    pos_inflow_days += 1
+            st["inflow_positive_days_of_5"] = pos_inflow_days
+            st["five_day_net_inflow_b_toman"] = round(five_day_net_inflow_bt, 1)
+
+            # 3. Fetch latest Codal letters for this symbol
             codal_letters = client.get_codal_letters(st["ticker"], limit=2)
             st["codal_ZeroToTwo"] = codal_letters
             st["latest_codal_title"] = codal_letters[0]["title"] if codal_letters else "گزارش جدیدی در کدال ثبت نشده"
             st["latest_codal_date"] = codal_letters[0]["publish_date"] if codal_letters else "-"
             st["latest_codal_tag"] = codal_letters[0]["tag"] if codal_letters else "-"
 
-            # Adjust final composite score based on RSI & Codal & Volume Surge
+            # 4. Adjust final composite score scientifically
             adj_score = st["score"]
             if st.get("vol_vs_5d_avg_ratio", 1.0) >= 2.0:
-                adj_score += 3.0  # Unusual volume breakout
-            if codal_letters and codal_letters[0]["sentiment"] > 0:
-                adj_score += 2.0
-            if st.get("rsi_14") and st["rsi_14"] > 78:
-                adj_score -= 5.0  # Overbought penalty
-            st["final_score"] = round(min(99.5, adj_score), 1)
+                adj_score += 3.0
+            if pos_inflow_days >= 3 and five_day_net_inflow_bt > 0:
+                adj_score += 5.0  # Multi-day smart money continuity bonus
+            elif pos_inflow_days <= 1 and five_day_net_inflow_bt < 0:
+                adj_score -= 6.0  # Single-day spike against 5-day outflow (potential fake code-to-code)
+
+            if codal_letters:
+                if codal_letters[0]["sentiment"] > 0:
+                    adj_score += 3.0
+                elif codal_letters[0]["sentiment"] < 0:
+                    adj_score -= 10.0  # Negative Codal disclosure penalty
+
+            if st.get("rsi_14") and st["rsi_14"] > 72:
+                adj_score -= 6.0  # Overbought penalty
+            if (st["last_change_pct"] - st["close_change_pct"]) > 2.5:
+                adj_score -= 3.0  # Daily ceiling gap risk
+            if is_locked_buy_queue:
+                adj_score -= 2.0  # Harder to execute immediately due to locked buy queue
+
+            st["final_score"] = round(max(10.0, min(99.5, adj_score)), 1)
         except Exception:
             st["final_score"] = st["score"]
 
     top_stocks.sort(key=lambda x: x.get("final_score", 0), reverse=True)
     sectors_ranking = compute_sectors_ranking(traded_all_stocks, ct_map)
 
-    # Compute overall Gold ETFs real money flow today
+    # Compute overall ETFs real money flow & average Gold ETF NAV bubble today
     gold_total_inflow = round(sum(g.get("net_real_inflow_b_toman", 0) for g in gold_etfs), 1)
     silver_total_inflow = round(sum(s.get("net_real_inflow_b_toman", 0) for s in silver_etfs), 1)
     fixed_total_inflow = round(sum(f.get("net_real_inflow_b_toman", 0) for f in fixed_income_etfs), 1)
+    gold_nav_bubbles = [g["nav_bubble_pct"] for g in gold_etfs if g.get("nav_bubble_pct") is not None]
+    avg_gold_etf_bubble = round(sum(gold_nav_bubbles) / len(gold_nav_bubbles), 2) if gold_nav_bubbles else 0.0
 
-    # Refine Gold upside/downside probability using today's ETF money flow
+    # Refine Gold upside/downside probability dynamically using today's ETF money flow & NAV bubble
     derived = macro.get("derived", {})
-    if gold_total_inflow < -25:
-        rs = min(85, derived.get("gold_downside_risk_pct", 50) + 15)
+    derived["avg_gold_etf_nav_bubble_pct"] = avg_gold_etf_bubble
+    ons_high_30 = macro.get("gold_ounce_usd", {}).get("tech", {}).get("high_30d", 0)
+    if gold_total_inflow < -25 or avg_gold_etf_bubble > 3.0:
+        rs = min(85, derived.get("gold_downside_risk_pct", 50) + (12 if gold_total_inflow < -25 else 0) + (10 if avg_gold_etf_bubble > 3.0 else 0))
         derived["gold_downside_risk_pct"] = rs
         derived["gold_upside_prob_pct"] = 100 - rs
         if rs >= 55:
             derived["gold_verdict"] = (
-                f"🔴 هشدار سیو سود / احتیاط در طلا: امروز {abs(gold_total_inflow)} میلیارد تومان پول حقیقی از صندوق‌های طلا خارج شده و انس جهانی هم از سقف ۴۲۸۴ دلار عقب نشسته است (احتمال اصلاح/درجا زدن: {rs}% در برابر احتمال رشد فوری: {100-rs}%)."
+                f"🔴 هشدار سیو سود / احتیاط در طلا: امروز {abs(gold_total_inflow)} میلیارد تومان پول حقیقی از صندوق‌های طلا خارج شده، "
+                f"میانگین حباب NAV صندوق‌های طلا {avg_gold_etf_bubble:+}% است و انس جهانی از سقف ۳۰ روزه ({ons_high_30} $) فاصله دارد "
+                f"(احتمال اصلاح/درجا زدن: {rs}% در برابر احتمال رشد فوری: {100-rs}%)."
             )
             derived["gold_action"] = "فروش پله‌ای / توقف خرید جدید طلا و پارک پول در صندوق درآمد ثابت (ریال امن ۳۰٪)"
 
-    # Build Executive Action Summary (خلاصه فرمان روز در بالای داشبورد)
-    best_stocks_names = [f"{s['ticker']} (P/E:{s.get('pe')})" for s in top_stocks[:3]]
+    # Build 100% Dynamic Executive Action Summary (خلاصه فرمان روز در بالای داشبورد)
+    best_stocks_names = [
+        f"{s['ticker']} (P/E:{s.get('pe')}, تداوم پول ۵روزه:{s.get('inflow_positive_days_of_5', 1)}/5)"
+        for s in top_stocks[:3]
+    ]
     best_sector = sectors_ranking[0] if sectors_ranking else {}
     worst_sector = sectors_ranking[-1] if sectors_ranking else {}
+    top_fixed_names = "، ".join(f["ticker"] for f in fixed_income_etfs[:3]) or "درآمد ثابت"
+    top_silver_names = "، ".join(s["ticker"] for s in silver_etfs[:3]) or "نقره"
+
+    buy_signals = []
+    if best_sector and best_sector.get("net_real_inflow_b_toman", 0) > 0:
+        buy_signals.append(
+            f"🏆 برترین صنعت امروز از نظر ورود پول: «{best_sector.get('title', '')}» با {best_sector.get('net_real_inflow_b_toman', 0):+} میلیارد تومان خالص خرید حقیقی (لیدرها: {best_sector.get('top_leaders', '-')})"
+        )
+    if best_stocks_names:
+        buy_signals.append(
+            f"💎 برترین تک‌سهم‌های غربال‌شده (تعدیل‌شده + تداوم پول): {' ، '.join(best_stocks_names)}"
+        )
+    if silver_total_inflow > 0:
+        buy_signals.append(
+            f"🥈 صندوق‌های نقره ({top_silver_names}): امروز +{silver_total_inflow} میلیارد تومان ورود پول حقیقی ثبت کردند."
+        )
+
+    sell_signals = []
+    if worst_sector and worst_sector.get("net_real_inflow_b_toman", 0) < 0:
+        sell_signals.append(
+            f"⚠️ ضعیف‌ترین صنعت امروز (پرهیز/خروج): «{worst_sector.get('title', '')}» به دلیل خروج سنگین {abs(worst_sector.get('net_real_inflow_b_toman', 0))} میلیارد تومان پول حقیقی (میانگین P/E گروه: {worst_sector.get('avg_pe', '-')})."
+        )
+    if gold_total_inflow < 0:
+        sell_signals.append(
+            f"🪙 صندوق‌های طلا: امروز {abs(gold_total_inflow)} میلیارد تومان خروج پول حقیقی داشتند (میانگین حباب NAV: {avg_gold_etf_bubble:+}%)؛ از خرید هیجانی در سقف خودداری کنید."
+        )
+    if silver_total_inflow < 0:
+        sell_signals.append(
+            f"🥈 صندوق‌های نقره: امروز {abs(silver_total_inflow)} میلیارد تومان خروج پول حقیقی داشتند."
+        )
 
     executive_summary = {
         "market_mode": (
-            "🛡️ فاز احتیاط در طلا و چرخش پول به سمت تک‌سهم‌های معدنی و درآمد ثابت"
-            if gold_total_inflow < 0 and fixed_total_inflow > 100
+            "🛡️ فاز احتیاط در طلا و چرخش هوشمند نقدینگی به سمت صنایع پیشرو و درآمد ثابت"
+            if gold_total_inflow < 0 and fixed_total_inflow > 50
             else "🚀 فاز ورود پول به دارایی‌های ریسکی"
         ),
-        "buy_signals": [
-            f"⛏️ بهترین گروه امروز برای خرید پله‌ای: «{best_sector.get('title', '')}» با +{best_sector.get('net_real_inflow_b_toman', 0)} میلیارد تومان ورود پول (لیدرها: فزر و فنقره)",
-            f"💎 برترین تک‌سهم‌های بنیادی با ورود پول هوشمند: {' ، '.join(best_stocks_names)}",
-            f"🥈 صندوق‌های نقره (سیمین، نقران، نقرابی): برخلاف طلا امروز +{silver_total_inflow} میلیارد تومان ورود پول حقیقی داشتند.",
-        ],
-        "sell_or_avoid_signals": [
-            f"💊 پرهیز جدی و خروج از: «{worst_sector.get('title', '')}» به دلیل خروج سنگین {abs(worst_sector.get('net_real_inflow_b_toman', 0))} میلیارد تومان پول حقیقی و بحران مواد اولیه.",
-            f"🪙 صندوق‌های طلا: امروز {abs(gold_total_inflow)} میلیارد تومان خروج پول حقیقی داشتند؛ در سقف قیمتی فعلی خرید هیجانی ممنوع!",
-        ],
+        "buy_signals": buy_signals,
+        "sell_or_avoid_signals": sell_signals,
         "rial_fixed_income_advice": (
-            f"🏦 استراتژی ریال و نقدینگی: امروز +{fixed_total_inflow} میلیارد تومان پول درشت وارد صندوق‌های درآمد ثابت (لبخند، افران، یاقوت) شد. "
-            "نگه داشتن ۳۰٪ تا ۳۵٪ سرمایه در این صندوق‌ها (با سود روزشمار ~۳۰٪) در این لحظه بهترین سپر است تا اگر طلا یا سهام اصلاح کرد، در کف قیمت شکار کنید."
+            f"🏦 استراتژی ریال و نقدینگی: امروز {fixed_total_inflow:+} میلیارد تومان پول حقیقی در صندوق‌های درآمد ثابت ({top_fixed_names}) جابجا شد. "
+            "نگه داشتن ۲۵٪ تا ۳۵٪ سرمایه در این صندوق‌ها (با سود روزشمار ~۳۰٪ بدون شکست نرخ) بهترین سپر نقدینگی برای شکار در اصلاح‌هاست."
         ),
         "flows_summary": {
             "gold_etfs_inflow_b_toman": gold_total_inflow,

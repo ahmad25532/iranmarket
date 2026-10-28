@@ -108,12 +108,39 @@ class TSETMCClient:
         items = data.get("clientTypeAllDto", [])
         return {str(item["insCode"]): item for item in items if "insCode" in item}
 
-    def get_instrument_history(self, ins_code: str, days: int = 60) -> List[Dict[str, Any]]:
+    def get_instrument_history(self, ins_code: str, days: int = 90) -> List[Dict[str, Any]]:
         """Fetches daily closing price history for technical analysis (RSI, SMA, etc.)."""
         data = self.get_json(
             "cdn.tsetmc.com", f"/api/ClosingPrice/GetClosingPriceDailyList/{ins_code}/{days}"
         )
         return data.get("closingPriceDaily", [])
+
+    def get_etf_nav(self, ins_code: str) -> Dict[str, Any]:
+        """Fetches official real-time Redemption NAV (pRedTran) & Subscription NAV (pSubTran) for ETFs."""
+        try:
+            data = self.get_json("cdn.tsetmc.com", f"/api/Fund/GetETFByInsCode/{ins_code}", timeout=6)
+            return data.get("etf", {}) or {}
+        except Exception:
+            return {}
+
+    def get_client_type_history(self, ins_code: str, days: int = 10) -> List[Dict[str, Any]]:
+        """Fetches multi-day Individual/Institutional money flow history from TSETMC."""
+        try:
+            data = self.get_json(
+                "cdn.tsetmc.com", f"/api/ClientType/GetClientTypeHistory/{ins_code}", timeout=6
+            )
+            items = data.get("clientType", []) or []
+            return items[:days]
+        except Exception:
+            return []
+
+    def get_best_limits(self, ins_code: str) -> List[Dict[str, Any]]:
+        """Fetches real-time 5-level Order Book (BestLimits) for Buy/Sell Queue detection."""
+        try:
+            data = self.get_json("cdn.tsetmc.com", f"/api/BestLimits/{ins_code}", timeout=6)
+            return data.get("bestLimits", []) or []
+        except Exception:
+            return []
 
     def get_instrument_info(self, ins_code: str) -> Dict[str, Any]:
         """Fetches detailed metadata, NAV, sector P/E, and 5-day average volume."""
@@ -135,24 +162,37 @@ class TSETMCClient:
             cleaned = []
             for l in letters[:limit]:
                 title = l.get("Title", "")
-                # Score fundamental positivity of Codal letter
-                tag = "خنثی/عمومی"
+                tag = "📄 اطلاعیه عمومی"
                 sentiment = 0
-                if "افشای اطلاعات بااهمیت" in title and "گروه الف" in title:
-                    tag = "🔥 افشای الف (بسیار مهم)"
+
+                # Distinguish positive, negative, and neutral financial disclosures accurately
+                if any(w in title for w in ["زیان", "تعلیق", "توقف", "لغو", "عدم انجام", "کاهش سود", "استعفای"]):
+                    tag = "⚠️ اطلاعیه منفی / هشدار کدال"
+                    sentiment = -1
+                elif "افشای اطلاعات بااهمیت" in title and "گروه الف" in title:
+                    tag = "🔥 افشای بااهمیت (گروه الف)"
                     sentiment = 2
+                elif "افشای اطلاعات بااهمیت" in title and any(
+                    w in title for w in ["برنده", "قرارداد", "وصول", "افزایش نرخ", "تجدید ارزیابی", "پروانه", "صادرات"]
+                ):
+                    tag = "✅ افشای مثبت (قرارداد/نرخ)"
+                    sentiment = 1
                 elif "افشای اطلاعات بااهمیت" in title:
                     tag = "📢 افشای اطلاعات (گروه ب)"
+                    sentiment = 0
+                elif "افزایش سرمایه" in title and ("مجوز" in title or "ثبت" in title):
+                    tag = "📈 مجوز/ثبت افزایش سرمایه"
                     sentiment = 1
                 elif "گزارش فعالیت ماهانه" in title:
-                    tag = "📊 گزارش فروش ماهانه"
-                    sentiment = 1
+                    tag = "📊 گزارش فروش ماهانه (نیازمند بررسی عدد فروش)"
+                    sentiment = 0
                 elif "صورت‌های مالی" in title:
-                    tag = "📑 صورت مالی دوره‌ای"
-                    sentiment = 1
+                    tag = "📑 صورت مالی دوره‌ای (نیازمند بررسی سود/زیان)"
+                    sentiment = 0
                 elif "آگهی دعوت به مجمع" in title:
                     tag = "🏛️ دعوت به مجمع"
-                    sentiment = 1
+                    sentiment = 0
+
                 cleaned.append({
                     "symbol": l.get("Symbol", ""),
                     "company": l.get("CompanyName", ""),
@@ -222,42 +262,52 @@ class TSETMCClient:
             "توافق", "آتش‌بس", "میانجی‌گری", "مذاکره", "صلح", "رفع تحریم", "گشایش", "پایان جنگ"
         ]
 
-        # 5 Geopolitical & Macro Scenarios Tracker
+        # 5 Geopolitical & Macro Scenarios Tracker (Dynamic status & impact computed from live hits)
         geo_axes = {
             "israel_politics": {
-                "title": "🇮🇱 انتخابات و کابینه اسرائیل",
-                "keywords": ["israel", "netanyahu", "eisenkot", "knesset", "exit poll", "اسرائیل", "نتانیاهو", "آیزنکوت", "تل‌آویو"],
+                "title": "🇮🇱 تحولات سیاسی و نظامی اسرائیل",
+                "keywords": ["israel", "netanyahu", "eisenkot", "knesset", "exit poll", "idf", "tel aviv", "اسرائیل", "نتانیاهو", "آیزنکوت", "تل‌آویو"],
                 "hits": [],
+                "risk_hits": 0,
+                "peace_hits": 0,
                 "status": "در حال رصد",
-                "market_impact": "بن‌بست انتخاباتی بین نتانیاهو و آیزنکوت، تصمیم‌گیری برای عملیات نظامی بزرگ را موقتاً دشوار می‌کند؛ سیگنال کاهش هیجان کاذب در حباب سکه و طلا.",
+                "market_impact": "",
             },
             "us_midterms": {
-                "title": "🇺🇸 انتخابات میان‌دوره‌ای و کاخ سفید",
-                "keywords": ["midterm", "trump", "washington", "congress", "white house", "u.s. warns", "ترامپ", "واشینگتن", "آمریکا", "میانجی"],
+                "title": "🇺🇸 کاخ سفید، کنگره و تحریم‌های آمریکا",
+                "keywords": ["midterm", "trump", "washington", "congress", "white house", "u.s. warns", "pentagon", "treasury", "ترامپ", "واشینگتن", "آمریکا"],
                 "hits": [],
-                "status": "⚠️ حساسیت بالا",
-                "market_impact": "نزدیکی به انتخابات میان‌دوره‌ای آمریکا و هشدارها درباره تغییر فاز پس از انتخابات؛ محرک اصلی تقاضای پوششی در صندوق‌های طلا، نقره و سهم‌های «فزر» و «فنقره».",
+                "risk_hits": 0,
+                "peace_hits": 0,
+                "status": "در حال رصد",
+                "market_impact": "",
             },
             "diplomacy_mediators": {
-                "title": "🇶🇦 میانجی‌گری قطر/عمان و پرونده آتش‌بس",
-                "keywords": ["qatar", "oman", "mediator", "deal to end", "ceasefire", "talks", "قطر", "عمان", "میانجی", "مذاکره", "آتش‌بس", "توافق"],
+                "title": "🇶🇦 میانجی‌گری منطقه‌ای و پرونده مذاکرات/آتش‌بس",
+                "keywords": ["qatar", "oman", "mediator", "deal to end", "ceasefire", "talks", "truce", "قطر", "عمان", "میانجی", "مذاکره", "آتش‌بس", "توافق"],
                 "hits": [],
-                "status": "🔄 در جریان (پیشنهاد جدید)",
-                "market_impact": "هرگونه خبر رسمی از پذیرش طرح میانجی‌های قطری، باعث ریزش فوری ۵ تا ۱۰ درصدی طلا و جهش شارپ صندوق‌های اهرمی (اهرم، موج، توان) و سهام خواهد شد.",
+                "risk_hits": 0,
+                "peace_hits": 0,
+                "status": "در حال رصد",
+                "market_impact": "",
             },
             "energy_hormuz": {
                 "title": "🛢️ امنیت انرژی، نفت و تنگه هرمز",
-                "keywords": ["hormuz", "oil", "tanker", "opec", "energy", "gas", "هرمز", "نفت", "انرژی", "پالایش", "بنزین"],
+                "keywords": ["hormuz", "oil", "tanker", "opec", "energy", "gas", "brent", "هرمز", "نفت", "انرژی", "پالایش", "بنزین", "نفتکش"],
                 "hits": [],
-                "status": "⚖️ نوسانی",
-                "market_impact": "حساسیت در تنگه هرمز و قیمت جهانی نفت و فلزات؛ حمایت مستقیم از حاشیه سود شرکت‌های معدنی، فلزی و روانکارها (مثل شسپا و فجر).",
+                "risk_hits": 0,
+                "peace_hits": 0,
+                "status": "در حال رصد",
+                "market_impact": "",
             },
             "domestic_economy": {
                 "title": "🏦 تورم داخلی، ارز و سیاست بانک مرکزی",
-                "keywords": ["تورم", "بانک مرکزی", "نرخ بهره", "ارز", "دلار", "مالیات", "بودجه", "کدال", "دارو", "برنج", "گرانی"],
+                "keywords": ["تورم", "بانک مرکزی", "نرخ بهره", "ارز", "دلار", "مالیات", "بودجه", "کدال", "دارو", "برنج", "گرانی", "نقدینگی"],
                 "hits": [],
-                "status": "📈 فشار تورمی",
-                "market_impact": "تورم بالای کالاهای اساسی و کمبود نقدینگی صنایع مصرفی (مثل دارو)؛ برتری مطلق شرکت‌های استخراج طلا/نقره و صندوق‌های کالایی نسبت به صنایع ریالی.",
+                "risk_hits": 0,
+                "peace_hits": 0,
+                "status": "در حال رصد",
+                "market_impact": "",
             },
         }
 
@@ -292,18 +342,22 @@ class TSETMCClient:
                             continue
 
                     # Match against the 5 Geopolitical Axes
+                    has_risk = any(kw in title_lower for kw in high_risk_keywords)
+                    has_peace = any(kw in title_lower for kw in deescalation_keywords)
+
                     matched_axis_title = None
                     for ax_key, ax_data in geo_axes.items():
                         if any(kw in title_lower for kw in ax_data["keywords"]):
                             if title not in ax_data["hits"] and len(ax_data["hits"]) < 3:
                                 ax_data["hits"].append(title)
+                            if has_risk:
+                                ax_data["risk_hits"] += 1
+                            if has_peace:
+                                ax_data["peace_hits"] += 1
                             matched_axis_title = ax_data["title"]
                             break
 
                     sentiment = "neutral"
-                    has_risk = any(kw in title_lower for kw in high_risk_keywords)
-                    has_peace = any(kw in title_lower for kw in deescalation_keywords)
-
                     if has_risk and not has_peace:
                         sentiment = "risk"
                         risk_score += 4
@@ -332,6 +386,30 @@ class TSETMCClient:
                         })
             except Exception:
                 continue
+
+        # Dynamically compute status and market_impact for each axis based on live hits
+        for ax_key, ax in geo_axes.items():
+            r_cnt = ax["risk_hits"]
+            p_cnt = ax["peace_hits"]
+            h_cnt = len(ax["hits"])
+            if h_cnt == 0:
+                ax["status"] = "🟢 آرام / بدون خبر تنش‌زا"
+                ax["market_impact"] = "در ۲۴ ساعت اخیر سیگنال تنش‌زایی در این محور ثبت نشده؛ اثر خنثی بر طلا و باثبات برای بورس."
+            elif r_cnt > p_cnt:
+                ax["status"] = f"🔴 تنش بالا ({r_cnt} سیگنال ریسک)"
+                ax["market_impact"] = (
+                    "غلبه اخبار تنش‌زا در این محور باعث افزایش تقاضای پوششی در طلا، نقره و نمادهای معدنی/فلزی و احتیاط در تک‌سهم‌های ریالی می‌شود."
+                )
+            elif p_cnt > r_cnt:
+                ax["status"] = f"🟢 سیگنال گشایش/توافق ({p_cnt} خبر مثبت)"
+                ax["market_impact"] = (
+                    "غلبه اخبار دیپلماتیک یا کاهش تنش در این محور، حباب طلا و دلار را تخلیه کرده و محرک رشد سهام و صندوق‌های اهرمی است."
+                )
+            else:
+                ax["status"] = f"⚖️ کشمکش و نوسان ({h_cnt} خبر فعال)"
+                ax["market_impact"] = (
+                    "اخبار متناقض (هم تنش و هم میانجی‌گری/ابهام سیاسی) در جریان است؛ استراتژی بهینه، حفظ تعادل بین صندوق‌های طلا/نقره و درآمد ثابت است."
+                )
 
         risk_score = max(10, min(95, risk_score))
         if risk_score >= 65:
