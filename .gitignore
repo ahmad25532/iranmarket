@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+my_portfolio.json
+latest_scan.json
