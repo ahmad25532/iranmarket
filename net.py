@@ -23,6 +23,8 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
+PLAIN_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "*/*"}
+
 
 class FetchError(RuntimeError):
     pass
@@ -99,6 +101,28 @@ class HttpClient:
                     break
                 time.sleep(self.backoff_s * (attempt + 1))
         raise FetchError(f"{host}{path}: {last_err}")
+
+    def get_bytes(self, url: str, timeout: float = 60) -> bytes:
+        """
+        Raw download (e.g. a zip) over the default route, with the same retries. Uses a bare
+        user agent: CFTC's CDN rejects a full browser UA that comes without a browser's TLS handshake.
+        """
+        last_err: Optional[Exception] = None
+        for attempt in range(self.retries):
+            try:
+                with self._opener.open(urllib.request.Request(url, headers=PLAIN_HEADERS), timeout=timeout) as r:
+                    return r.read()
+            except (OSError, http.client.HTTPException) as e:
+                last_err = e
+                time.sleep(self.backoff_s * (attempt + 1))
+        raise FetchError(f"{url}: {last_err}")
+
+    def get_json_url(self, url: str, timeout: float = 60) -> Any:
+        text = self.get_bytes(url, timeout=timeout).decode("utf-8", errors="replace")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            raise FetchError(f"Invalid JSON from {url}: {e}; body starts {text[:120]!r}")
 
     def get_json(
         self, host: str, path: str, timeout: float = 15, direct: bool = True, body: Optional[Any] = None

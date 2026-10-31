@@ -6,6 +6,13 @@
       "runtimeExecutable": ".venv\\Scripts\\python.exe",
       "runtimeArgs": ["dashboard.py"],
       "port": 8085
+    },
+    {
+      "name": "dashboard-alt",
+      "runtimeExecutable": ".venv\\Scripts\\python.exe",
+      "runtimeArgs": ["dashboard.py"],
+      "env": {"PORT": "8086"},
+      "port": 8086
     }
   ]
 }

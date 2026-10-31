@@ -68,6 +68,11 @@ ul.plain li { padding: 3px 0; }
 .muted { color: var(--muted); }
 .ltr { direction: ltr; unicode-bidi: embed; }
 #banner { display: none; margin-bottom: 16px; }
+.h3 { font-size: 15px; font-weight: 700; }
+.range { position: relative; height: 6px; background: var(--track); border-radius: 3px; margin: 6px 4px; }
+.range > i { position: absolute; top: -3px; width: 12px; height: 12px; margin-right: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--card); }
+.range-ends { font-size: 11px; color: var(--faint); text-align: center; }
+#gg-drivers td:nth-child(2), #gg-drivers td:nth-child(3) { white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -128,6 +133,52 @@ ul.plain li { padding: 3px 0; }
     <div class="sub" style="margin-top:6px">بازده NAV یعنی رشد دارایی صندوق، بدون اثر تغییر حباب. بازده قیمت (مثل ایزی‌تریدر) تغییر حباب را هم دارد. «حباب معمول» میانه حباب خود صندوق در حدود یک سال گذشته است.</div>
   </section>
 
+  <section class="card" style="margin-bottom:16px" id="global-section">
+    <h2>طلای جهانی</h2>
+    <div class="sub">محرک‌های انس و جایگاه امروزشان در ۵ سال گذشته. هشت سیگنال زمان‌بندی (روند، مومنتوم، بازده واقعی، دلار، COT، نوسان، نسبت طلا به نقره، ارزش منصفانه) روی ۲۰ سال داده آزمون شدند و هیچ‌کدام در دوره آزمون تأیید نشد؛ این بخش زمینه است، نه سیگنال.</div>
+    <div class="sub" id="gg-meta" style="margin-top:4px"></div>
+    <div class="kpis" id="gg-kpis" style="margin-top:12px"></div>
+    <div class="grid" style="margin-bottom:0">
+      <div>
+        <h3 class="h3">طلای ۱۸ عیار شما از کجا تکان می‌خورد</h3>
+        <div class="sub">قیمت ۱۸ عیار = انس × دلار آزاد × (۱ + حباب). این تجزیه دقیق است، نه تخمین.</div>
+        <div class="tablewrap" style="margin-top:8px">
+          <table><thead><tr><th>دوره</th><th>طلای ۱۸ عیار</th><th>تغییر انس</th><th>تغییر دلار آزاد</th><th>تغییر حباب</th></tr></thead>
+          <tbody id="gg-decomp"></tbody></table>
+        </div>
+        <div class="sub" id="gg-variance" style="margin-top:8px"></div>
+      </div>
+      <div>
+        <h3 class="h3">محرک‌های انس امروز</h3>
+        <div class="sub">نوار: بازه ۵ ساله هر محرک (راست کمترین، چپ بیشترین)؛ نقطه: امروز. صدک ۹۰ یعنی امروز از ۹۰٪ روزهای ۵ سال گذشته بالاتر است.</div>
+        <div class="tablewrap" style="margin-top:8px">
+          <table><thead><tr><th>محرک</th><th>امروز</th><th>تغییر ۳ ماه</th><th style="min-width:110px">در ۵ سال</th></tr></thead>
+          <tbody id="gg-drivers"></tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="grid" style="margin:16px 0 0">
+      <div>
+        <h3 class="h3">انس و بازده واقعی ۱۰ ساله</h3>
+        <div class="sub">محور بازده واقعی وارونه است: تا حدود ۲۰۲۱ دو خط تقریباً روی هم بودند؛ از ۲۰۲۲ خرید بانک‌های مرکزی این رابطه را شکست.</div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>انس (دلار، مقیاس لگاریتمی)</span><span><i style="background:var(--warn)"></i>بازده واقعی (٪، وارونه)</span></div>
+        <div class="chart"><canvas id="c-gg" role="img" aria-label="قیمت انس طلا و بازده واقعی ۱۰ ساله آمریکا، ماهانه"></canvas></div>
+      </div>
+      <div>
+        <h3 class="h3">آیا رابطه‌ها هنوز برقرارند؟</h3>
+        <div class="sub">همبستگی ۵۲ هفته‌ای بازده هفتگی انس با تغییر بازده واقعی و با شاخص دلار. منفی‌تر = رابطه معکوس قوی‌تر.</div>
+        <div class="legend"><span><i style="background:var(--warn)"></i>با بازده واقعی</span><span><i style="background:var(--accent)"></i>با شاخص دلار</span></div>
+        <div class="chart"><canvas id="c-ggcorr" role="img" aria-label="همبستگی غلتان انس با بازده واقعی و شاخص دلار"></canvas></div>
+      </div>
+    </div>
+    <details style="margin-top:12px"><summary>نتیجه آزمون سیگنال‌های زمان‌بندی انس (۶۰ روز معاملاتی بعد)</summary>
+      <div class="sub" id="gg-periods" style="margin:6px 0"></div>
+      <div class="tablewrap"><table><thead><tr><th>سیگنال</th><th>دوره طراحی: بالا منهای پایین</th><th>دوره آزمون</th><th>نتیجه</th></tr></thead>
+      <tbody id="gg-signals"></tbody></table></div>
+      <div class="sub" id="gg-trend" style="margin-top:8px"></div>
+    </details>
+  </section>
+
   <section class="grid">
     <div class="card">
       <h2>شاخص کل به دلار آزاد</h2>
@@ -150,6 +201,7 @@ ul.plain li { padding: 3px 0; }
         <li><span class="badge fail">رد شد</span> سیگنال خروج با روند شاخص، روند دلاری، جریان پول حقیقی</li>
         <li><span class="badge fail">رد شد</span> چرخش سهام و طلا با مومنتوم</li>
         <li><span class="badge fail">رد شد</span> زمان‌بندی خرید طلا با حباب ۱۸ عیار یا حباب صندوق</li>
+        <li><span class="badge fail">تأیید نشد</span> زمان‌بندی انس با روند، بازده واقعی، دلار، COT، نوسان و ارزش منصفانه</li>
         <li><span class="badge info">آزمون نشده</span> سیگنال‌های خبری و انتخاب سهم</li>
       </ul>
       <div class="sub" style="margin-top:8px">دلیل اصلی رد شدن سیگنال‌های خروج: در بحران‌ها بازار در صف فروش است و نمی‌شود خارج شد. جزئیات: <span class="ltr">docs/phase3_findings.md</span></div>
@@ -301,6 +353,90 @@ function lineChart(id, rows, opts) {
   });
 }
 
+const VERDICT = {validated: ['ok', 'تأیید شد'], weak: ['warn', 'ضعیف'], failed: ['fail', 'رد شد'], untested: ['info', 'داده کافی نیست']};
+
+function driverValue(r) {
+  if (r.unit === '$') return '$' + fa(r.value, 0);
+  if (r.unit === '%') return fa(r.value, 2) + '٪';
+  if (r.unit === '%oi') return pct(r.value, 0);
+  return fa(r.value, 1);
+}
+
+function driverChange(r) {
+  if (r.chg3m == null) return '<span class="muted">-</span>';
+  if (!r.chg_is_points) return pct(r.chg3m);
+  const v = r.unit === '%oi' ? r.chg3m * 100 : r.chg3m;
+  return '<span dir="ltr">' + (v >= 0 ? '+' : '−') + fa(Math.abs(v), r.unit === '%oi' ? 0 : 2) + '</span> واحد';
+}
+
+function renderGlobal(g) {
+  const sec = document.getElementById('global-section');
+  if (!g || !g.available) {
+    sec.querySelector('#gg-meta').textContent = 'داده‌های جهانی هنوز دریافت نشده‌اند. یک بار اجرا کنید: collector.py global';
+    return;
+  }
+  document.getElementById('gg-meta').innerHTML = 'داده‌های بازار آمریکا تا ' + jdate(g.as_of) +
+    (g.cot_report ? ' · آخرین گزارش COT: ' + jdate(g.cot_report) : '');
+  const o = g.gold;
+  document.getElementById('gg-kpis').innerHTML = [
+    ['انس (پایانی آمریکا)', '$' + fa(o.price, 0), jdate(g.as_of)],
+    ['فاصله از میانگین ۲۰۰ روزه', pct(o.trend200), o.trend200 >= 0 ? 'بالای روند بلندمدت' : 'زیر روند بلندمدت'],
+    ['فاصله از سقف تاریخی', pct(o.from_high), 'سقف $' + fa(o.high, 0)],
+    ['بازده ۱۲ ماه', o.mom12m == null ? '-' : pct(o.mom12m, 0), 'به دلار'],
+  ].map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`).join('');
+
+  const labels = {'1m': '۱ ماه', '3m': '۳ ماه', '12m': '۱۲ ماه'};
+  document.getElementById('gg-decomp').innerHTML = Object.entries(g.decomposition).filter(([, d]) => d).map(([k, d]) =>
+    `<tr><td>${labels[k]}</td><td><b>${pct(d.total)}</b></td><td>${pct(d.ounce)}</td><td>${pct(d.usd)}</td><td>${pct(d.bubble)}</td></tr>`).join('');
+  const v3 = g.variance['3y'], va = g.variance.all;
+  document.getElementById('gg-variance').innerHTML = v3 ? `در ۳ سال اخیر <b>${fa(v3.usd * 100)}٪</b> نوسان ماهانه طلای ۱۸ عیار از دلار آزاد آمده و <b>${fa(v3.ounce * 100)}٪</b> از انس` +
+    (va ? ` (از ۱۳۹۲: دلار ${fa(va.usd * 100)}٪، انس ${fa(va.ounce * 100)}٪)` : '') + '. برای سرمایه‌گذار ایرانی، دلار آزاد محرک اصلی است و انس محرک دوم.' : '';
+
+  document.getElementById('gg-drivers').innerHTML = g.drivers.map(r => {
+    const pos = Math.max(0, Math.min(100, (r.value - r.min5y) / ((r.max5y - r.min5y) || 1) * 100));
+    return `<tr title="${esc(r.note)}"><td>${esc(r.label)}</td><td>${driverValue(r)}</td><td>${driverChange(r)}</td>
+      <td><div class="range"><i style="right:${pos}%"></i></div><div class="range-ends">صدک ${fa(r.pct5y * 100)}</div></td></tr>`;
+  }).join('');
+
+  const p = g.periods;
+  document.getElementById('gg-periods').innerHTML = `مرزهای سه‌گانه (پایین / وسط / بالا) فقط از دوره طراحی (${jdate(p.design[0])} تا ${jdate(p.design[1])}) آمده و بدون تغییر روی دوره آزمون (${jdate(p.test[0])} تا ${jdate(p.test[1])}) اجرا شده. عدد = میانگین بازده ۶۰ روز بعد انس وقتی سیگنال در یک‌سوم بالا بوده منهای وقتی در یک‌سوم پایین بوده.`;
+  document.getElementById('gg-signals').innerHTML = g.signals.map(s => {
+    const [cls, label] = VERDICT[s.verdict];
+    const cell = (x, t) => x == null ? '-' : pct(x) + ` <span class="muted">(t=${fa(t, 1)})</span>`;
+    const note = s.verdict !== 'failed' && !s.matches_textbook ? ' <span class="muted">· جهت برعکس انتظار کتاب‌ها</span>' : '';
+    return `<tr><td>${esc(s.label)}</td><td>${cell(s.design_spread, s.design_t)}</td><td>${cell(s.test_spread, s.test_t)}</td><td><span class="badge ${cls}">${label}</span>${note}</td></tr>`;
+  }).join('');
+  const tt = g.trend_timing.test;
+  document.getElementById('gg-trend').innerHTML = `خروج از طلا زیر میانگین ۲۰۰ روزه (و نگه‌داشتن اوراق خزانه) در دوره آزمون: بازده سالانه ${pct(tt.trend.cagr)} در برابر ${pct(tt.hold.cagr)} نگه‌داشتن، بیشترین افت ${pct(tt.trend.maxdd, 0)} در برابر ${pct(tt.hold.maxdd, 0)}. یعنی هم بازده کمتر و هم افت بیشتر.`;
+
+  const rows = g.monthly;
+  const accent = css('--accent'), warn = css('--warn'), grid = css('--grid'), muted = css('--faint');
+  const xTicks = {color: muted, maxTicksLimit: 8, maxRotation: 0, callback: function (v) { return this.getLabelForValue(v).slice(0, 4); }};
+  if (charts['c-gg']) charts['c-gg'].destroy();
+  charts['c-gg'] = new Chart(document.getElementById('c-gg'), {
+    type: 'line',
+    data: {labels: rows.map(r => r.m), datasets: [
+      {data: rows.map(r => r.gold), borderColor: accent, borderWidth: 2, pointRadius: 0, tension: 0.2, yAxisID: 'y'},
+      {data: rows.map(r => r.real10), borderColor: warn, borderWidth: 2, pointRadius: 0, tension: 0.2, yAxisID: 'y1'}]},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {rtl: true, callbacks: {label: c => c.datasetIndex ? ' بازده واقعی ' + fa(c.parsed.y, 2) + '٪' : ' انس $' + fa(c.parsed.y)}}},
+      scales: {x: {grid: {display: false}, ticks: xTicks},
+        y: {type: 'logarithmic', position: 'right', grid: {color: grid}, border: {display: false}, ticks: {color: muted, maxTicksLimit: 6, callback: v => '$' + fa(v)}},
+        y1: {reverse: true, position: 'left', grid: {display: false}, border: {display: false}, ticks: {color: muted, maxTicksLimit: 6, callback: v => fa(v, 1) + '٪'}}}}
+  });
+  if (charts['c-ggcorr']) charts['c-ggcorr'].destroy();
+  charts['c-ggcorr'] = new Chart(document.getElementById('c-ggcorr'), {
+    type: 'line',
+    data: {labels: rows.map(r => r.m), datasets: [
+      {data: rows.map(r => r.corr_real10), borderColor: warn, borderWidth: 2, pointRadius: 0, tension: 0.2},
+      {data: rows.map(r => r.corr_dxy), borderColor: accent, borderWidth: 2, pointRadius: 0, tension: 0.2}]},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {rtl: true, callbacks: {label: c => (c.datasetIndex ? ' با دلار ' : ' با بازده واقعی ') + fa(c.parsed.y, 2)}}},
+      scales: {x: {grid: {display: false}, ticks: xTicks},
+        y: {min: -1, max: 1, grid: {color: c => c.tick.value === 0 ? muted : grid}, border: {display: false}, ticks: {color: muted, stepSize: 0.5, callback: v => fa(v, 1)}}}}
+  });
+}
+
 function render(s) {
   current = s;
   renderHealth(s.health);
@@ -309,6 +445,7 @@ function render(s) {
   renderGold(s.gold_funds);
   lineChart('c-ted', s.context.tedpix_usd, {});
   lineChart('c-bub', s.context.gold18_bubble, {base: 0, suffix: '٪'});
+  renderGlobal(s.global_gold);
 }
 
 async function load() {

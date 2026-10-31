@@ -25,6 +25,7 @@ import duckdb
 
 import adjust
 import datastore
+import globalgold
 import quality
 import sources
 from net import FetchError, HttpClient
@@ -243,6 +244,12 @@ def refresh_tgju(run: Run, length: int) -> None:
         store_live_macro(run.con, sources.parse_tgju_live(current))
 
 
+def refresh_global(run: Run, full: bool) -> None:
+    """Global gold drivers (Yahoo, US Treasury, CFTC); these hosts are reached over the default route."""
+    counts = globalgold.refresh(run, full)
+    print("  global gold: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
+
+
 def store_live_macro(con: duckdb.DuckDBPyConnection, rows: List[Dict[str, Any]]) -> int:
     """Stores live prices for days TGJU has not closed yet; never overwrites a closed-day row."""
     closed = {(s, d) for s, d in con.execute(
@@ -332,6 +339,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
     last_macro = con.execute("SELECT min(m) FROM (SELECT max(d) AS m FROM macro_daily GROUP BY series)").fetchone()[0]
     gap_days = (today - last_macro).days if last_macro else 20000
     refresh_tgju(run, max(30, gap_days + 10))
+    refresh_global(run, full=False)
 
     # 5) Rebuild dividend/capital-increase adjusted prices and queue flags from the raw tables
     adj = adjust.build(con)
@@ -350,6 +358,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
         # Fipiran publishes NAV a day or two late, so the most recent days are not counted yet.
         quality.check_gaps("gaps_nav", remaining("etf_nav", "nav", days[:-3])),
         quality.check_macro_freshness(con, today, list(sources.TGJU_SERIES)),
+        quality.check_global_freshness(con, today),
         quality.check_fetch_errors(con, run.id),
     ]
     return 1 if quality.save_and_summarize(con, run.id, d, checks) else 0
@@ -416,12 +425,14 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
     print(f"  index history: {len(names)} indices, {refresh_indices(run, list(names))} rows")
 
     refresh_tgju(run, 20000)
+    refresh_global(run, full=True)
     adj = adjust.build(con)
     print(f"  adjusted prices rebuilt: {adj['rows']:,} rows, {adj['events']:,} corporate actions")
 
     print("Quality checks:")
     checks = [
         quality.check_macro_freshness(con, date.today(), list(sources.TGJU_SERIES)),
+        quality.check_global_freshness(con, date.today()),
         quality.check_fetch_errors(con, run.id),
     ]
     return 1 if quality.save_and_summarize(con, run.id, None, checks) else 0
@@ -469,6 +480,7 @@ def main() -> int:
     p_back.add_argument("--limit", type=int)
     p_back.add_argument("--refresh", action="store_true", help="re-download instruments already backfilled")
     sub.add_parser("status")
+    sub.add_parser("global", help="re-download the full history of the global gold drivers only")
     ap.add_argument("--db", default=datastore.DEFAULT_DB_PATH)
     args = ap.parse_args()
 
@@ -479,6 +491,10 @@ def main() -> int:
         http = HttpClient()
         if not http.source_ip:
             print("  note: no LAN interface reached TSETMC; using the default route")
+        if args.cmd == "global":
+            run = Run(con, http)
+            refresh_global(run, full=True)
+            return 1 if con.execute("SELECT count(*) FROM fetch_log WHERE run_id = ? AND status = 'error'", [run.id]).fetchone()[0] else 0
         if args.cmd == "daily":
             return collect_daily(con, http, args.allow_open, args.force)
         return backfill(con, http, args.limit, args.refresh)

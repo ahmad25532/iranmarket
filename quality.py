@@ -115,6 +115,20 @@ def check_macro_freshness(con: duckdb.DuckDBPyConnection, today: date, series: L
     return ("macro_freshness", "ok", f"{len(series)} TGJU series up to date")
 
 
+def check_global_freshness(con: duckdb.DuckDBPyConnection, today: date) -> Check:
+    """US markets close for weekends and holidays; more than 5 days without data means a feed broke."""
+    rows = con.execute("SELECT series, max(d) FROM global_daily GROUP BY series").fetchall()
+    cot = _scalar(con, "SELECT max(report_d) FROM cot_gold")
+    stale = [f"{s}:{d}" for s, d in rows if (today - d).days > 5]
+    if cot is None or (today - cot).days > 14:
+        stale.append(f"cot:{cot}")
+    if not rows:
+        return ("global_freshness", "warn", "no global gold data yet (run: collector.py global)")
+    if stale:
+        return ("global_freshness", "warn", "stale global series: " + ", ".join(stale))
+    return ("global_freshness", "ok", f"{len(rows)} global series + COT up to date")
+
+
 def check_fetch_errors(con: duckdb.DuckDBPyConnection, run_id: str) -> Check:
     total, errors = con.execute(
         "SELECT count(*), count(*) FILTER (WHERE status = 'error') FROM fetch_log WHERE run_id = ?", [run_id]

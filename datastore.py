@@ -124,6 +124,25 @@ CREATE TABLE IF NOT EXISTS macro_daily (
 ALTER TABLE macro_daily ADD COLUMN IF NOT EXISTS source VARCHAR;
 ALTER TABLE macro_daily ADD COLUMN IF NOT EXISTS as_of TIMESTAMP;
 
+-- Global gold drivers (see globalgold.py): futures, DXY, GVZ and yields from Yahoo, the 10y real
+-- yield from the US Treasury. Keyed by the exchange's own date.
+CREATE TABLE IF NOT EXISTS global_daily (
+    series  VARCHAR,
+    d       DATE,
+    close   DOUBLE,
+    PRIMARY KEY (series, d)
+);
+
+-- CFTC disaggregated COT, COMEX gold. Positions are as of report_d (Tuesday) and public from released_d.
+CREATE TABLE IF NOT EXISTS cot_gold (
+    report_d       DATE PRIMARY KEY,
+    released_d     DATE,
+    open_interest  DOUBLE,
+    mm_long  DOUBLE, mm_short  DOUBLE,   -- managed money (funds, CTAs)
+    pm_long  DOUBLE, pm_short  DOUBLE,   -- producers / merchants
+    sw_long  DOUBLE, sw_short  DOUBLE    -- swap dealers (bullion banks)
+);
+
 -- One row per market date for which an end-of-day snapshot was taken (final = market was closed).
 CREATE TABLE IF NOT EXISTS snapshots (
     d         DATE PRIMARY KEY,
@@ -179,6 +198,8 @@ TABLE_KEYS = {
     "index_daily": ["index_code", "d"],
     "market_overview": ["market", "d"],
     "macro_daily": ["series", "d"],
+    "global_daily": ["series", "d"],
+    "cot_gold": ["report_d"],
     "backfill_status": ["ins_code", "kind"],
     "snapshots": ["d"],
     "filled_days": ["d", "kind"],

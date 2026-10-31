@@ -5,6 +5,8 @@ Shows only what passed the Phase 3 out-of-sample tests, plus context and data he
 - your portfolio split (stocks / gold / fixed income / cash) against the target you set
 - gold funds side by side (NAV returns, premium vs each fund's own normal, liquidity, data warnings)
 - free-market USD, 18k gold, its bubble vs intrinsic value, TEDPIX in dollars (context only)
+- global gold: the ounce's drivers against their own history, what moves Iranian 18k gold, and
+  which global timing signals were tested (none passed out of sample)
 - whether today's data is complete and final
 
 Run:  .venv\\Scripts\\python.exe dashboard.py   ->  http://127.0.0.1:8085
@@ -23,6 +25,7 @@ from typing import Any, Dict, List, Optional
 import duckdb
 
 import datastore
+import globalgold
 import goldfunds
 import sources
 from net import FetchError, HttpClient
@@ -259,6 +262,7 @@ def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
         "portfolio": pf,
         "valuation": value_portfolio(con, pf, market),
         "context": context_series(con),
+        "global_gold": globalgold.dashboard(con),
     }
 
 
