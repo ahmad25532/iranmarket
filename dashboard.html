@@ -112,14 +112,20 @@ ul.plain li { padding: 3px 0; }
   </section>
 
   <section class="card" style="margin-bottom:16px">
-    <h2>صندوق‌های طلا امروز: حباب نسبت به NAV</h2>
-    <div class="sub">حباب = میانگین قیمت معاملات امروز ÷ NAV ابطال − ۱. در آزمون فاز ۳، بین صندوق‌های نقدشونده (معامله روزانه ≥ ۱۰ میلیارد تومان) کم‌حباب‌ترین صندوق در ۶۴ تا ۶۶٪ روزها طی ۲۰ تا ۶۰ روز بعد ۱٫۶ تا ۱٫۸٪ بهتر از بقیه بود. بین بزرگ‌ترین صندوق‌ها این مزیت دیده نشد. این برای «کدام صندوق» است، نه «کی بخریم».</div>
+    <h2>صندوق‌های طلا کنار هم</h2>
+    <div class="sub">در آزمون‌ها هیچ معیاری (حباب، حباب نسبت به حالت معمول، بازده گذشته) صندوق بهتری انتخاب نکرد؛ صندوق‌های طلای نقدشونده تقریباً جایگزین هم‌اند. ملاک عملی: نقدشوندگی و کارمزد. ترتیب جدول بر اساس حجم معاملات است، نه توصیه.</div>
+    <div class="sub" id="gold-meta" style="margin-top:6px"></div>
     <div class="tablewrap" style="margin-top:10px">
       <table>
-        <thead><tr><th>نماد</th><th>حباب</th><th>میانگین معامله روزانه</th><th>تعداد معاملات</th><th>تاریخ</th><th></th></tr></thead>
+        <thead><tr>
+          <th>نماد</th><th>معامله روزانه</th>
+          <th>بازده NAV ۱ ماه</th><th>۳ ماه</th><th>۶ ماه</th><th>۱۲ ماه</th><th>بازده قیمت ۱۲ ماه</th>
+          <th>حباب امروز</th><th>حباب معمول خودش</th><th></th>
+        </tr></thead>
         <tbody id="gold-funds"></tbody>
       </table>
     </div>
+    <div class="sub" style="margin-top:6px">بازده NAV یعنی رشد دارایی صندوق، بدون اثر تغییر حباب. بازده قیمت (مثل ایزی‌تریدر) تغییر حباب را هم دارد. «حباب معمول» میانه حباب خود صندوق در حدود یک سال گذشته است.</div>
   </section>
 
   <section class="grid">
@@ -140,7 +146,7 @@ ul.plain li { padding: 3px 0; }
       <h2>آنچه آزمون شد</h2>
       <ul class="plain">
         <li><span class="badge ok">تأیید شد</span> ترکیب ثابت سهام و طلا (به‌جای زمان‌بندی)</li>
-        <li><span class="badge ok">تأیید شد</span> انتخاب کم‌حباب‌ترین صندوق طلای نقدشونده هنگام خرید</li>
+        <li><span class="badge fail">رد شد</span> انتخاب صندوق طلا با حباب، حباب نسبت به حالت معمول یا بازده گذشته</li>
         <li><span class="badge fail">رد شد</span> سیگنال خروج با روند شاخص، روند دلاری، جریان پول حقیقی</li>
         <li><span class="badge fail">رد شد</span> چرخش سهام و طلا با مومنتوم</li>
         <li><span class="badge fail">رد شد</span> زمان‌بندی خرید طلا با حباب ۱۸ عیار یا حباب صندوق</li>
@@ -238,25 +244,33 @@ function renderForm(pf) {
 }
 
 let showAllGold = false;
-function renderGold(rows) {
+function renderGold(g) {
+  const rows = g.rows;
   const tb = document.getElementById('gold-funds');
-  if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">داده‌ای برای صندوق‌های طلا نیست.</td></tr>'; return; }
+  const cols = 10;
+  document.getElementById('gold-meta').innerHTML =
+    (g.gold18_12m != null ? 'برای مقایسه، طلای ۱۸ عیار در ۱۲ ماه: ' + pct(g.gold18_12m, 0) + ' · ' : '') +
+    'NAV تا ' + jdate(g.nav_as_of) + ' (فیپیران یکی دو روز دیرتر منتشر می‌کند)';
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="${cols}" class="muted">داده‌ای برای صندوق‌های طلا نیست.</td></tr>`; return; }
   const LIMIT = 12;
   const shown = showAllGold ? rows : rows.slice(0, LIMIT);
   const more = rows.length > LIMIT
-    ? `<tr><td colspan="6"><button type="button" id="gold-toggle">${showAllGold ? 'نمایش کمتر' : 'نمایش همه ' + fa(rows.length) + ' صندوق'}</button></td></tr>` : '';
+    ? `<tr><td colspan="${cols}"><button type="button" id="gold-toggle">${showAllGold ? 'نمایش کمتر' : 'نمایش همه ' + fa(rows.length) + ' صندوق'}</button></td></tr>` : '';
+  const p = (x, d = 0) => x == null ? '<span class="muted">-</span>' : pct(x, d);
   tb.innerHTML = shown.map(r => {
     const tags = [];
-    if (r.cheapest_liquid) tags.push('<span class="badge ok">کم‌حباب‌ترین صندوق نقدشونده</span>');
-    else if (r.very_large) tags.push('<span class="badge info">بزرگ</span>');
     if (!r.liquid) tags.push('<span class="badge warn">کم‌معامله</span>');
-    return `<tr class="${r.cheapest_liquid ? 'hl' : ''}">
-      <td>${esc(r.ticker)}</td><td>${pct(r.premium, 2)}</td>
-      <td>${r.avg_value ? fa(toman(r.avg_value) / 1e9, 1) + ' میلیارد تومان' : '-'}</td>
-      <td>${fa(r.trades)}</td><td>${jdate(r.d)}</td><td>${tags.join(' ')}</td></tr>`;
+    if (r.nav_artifacts_12m) tags.push(`<span class="badge warn" title="${fa(r.nav_artifacts_12m)} روز با پرش غیرواقعی NAV در یک سال؛ آن روزها با تغییر طلا جایگزین شده‌اند">داده NAV ناپیوسته</span>`);
+    if (r.nav_sources_disagree) tags.push('<span class="badge fail" title="NAV فیپیران با NAV رسمی بورس بیش از ۳ واحد فاصله دارد">NAV دو منبع ناهمخوان</span>');
+    if (!r.has_nav_history) tags.push('<span class="badge info" title="این صندوق در فیپیران ثبت نیست؛ تاریخچه NAV از امروز به بعد جمع می‌شود">بدون تاریخچه NAV</span>');
+    return `<tr class="${r.reliable ? '' : 'muted'}">
+      <td>${esc(r.ticker)}</td>
+      <td>${r.avg_value ? fa(toman(r.avg_value) / 1e9, 0) + ' میلیارد' : '-'}</td>
+      <td>${p(r.nav_1m, 1)}</td><td>${p(r.nav_3m)}</td><td>${p(r.nav_6m)}</td><td>${p(r.nav_12m)}</td><td>${p(r.price_12m)}</td>
+      <td>${p(r.premium_today, 2)}</td><td>${p(r.normal_premium, 2)}</td><td>${tags.join(' ')}</td></tr>`;
   }).join('') + more;
   const btn = document.getElementById('gold-toggle');
-  if (btn) btn.onclick = () => { showAllGold = !showAllGold; renderGold(rows); };
+  if (btn) btn.onclick = () => { showAllGold = !showAllGold; renderGold(g); };
 }
 
 function renderHealth(h) {

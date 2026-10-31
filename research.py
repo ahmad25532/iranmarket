@@ -26,6 +26,7 @@ import polars as pl
 
 import backtest
 import datastore
+import goldfunds
 
 IN_SAMPLE = (date(2014, 4, 1), date(2020, 12, 31))
 OUT_OF_SAMPLE = (date(2021, 1, 1), date(2026, 12, 31))
@@ -437,13 +438,32 @@ def report(con: duckdb.DuckDBPyConnection) -> None:
 
     print("\n=== Same day, lowest-premium gold fund minus the other gold funds (gold price moves cancel out) ===")
     print("  entry at next day's VWAP; only days with >= 3 funds in the tier (design period has too few funds)")
-    for tier, (min_value, min_trades) in LIQUIDITY_TIERS.items():
-        gt = g.filter((pl.col("value") >= min_value) & (pl.col("trades") >= min_trades))
+    # Funds whose Fipiran NAV had a data error in the previous 250 observations are a separate tier:
+    # a stale or wrong NAV makes the premium look low, which is where the raw "edge" came from.
+    recent_errors = goldfunds.load_nav(con).sort("ins_code", "d").with_columns(
+        pl.col("artifact").cast(pl.Int32).rolling_sum(250, min_samples=1).over("ins_code").alias("recent_errors")
+    ).select("ins_code", "d", "recent_errors")
+    g_clean = g.join(recent_errors, on=["ins_code", "d"], how="left").filter(pl.col("recent_errors").fill_null(1) == 0)
+    tiers = [(tier, g, v, n) for tier, (v, n) in LIQUIDITY_TIERS.items()]
+    tiers.append(("liquid, clean NAV data only", g_clean, 1e11, 100))
+    for tier, source, min_value, min_trades in tiers:
+        gt = source.filter((pl.col("value") >= min_value) & (pl.col("trades") >= min_trades))
         for horizon in ("fwd20", "fwd60"):
             s = cheapest_fund_spread(gt, horizon).filter(pl.col("d") >= OUT_OF_SAMPLE[0])
             if s.height:
                 print(f"  {tier:<42}{horizon}: days {s.height:>4}, mean spread {s['spread'].mean():+.2%}, "
                       f"cheapest wins {float((s['spread'] > 0).mean()):.0%}")
+
+    print("\n=== Gold fund selection with cleaned NAV (liquid funds, test period, next 60 trading days, price) ===")
+    r = goldfunds.rel_premium_test(con, OUT_OF_SAMPLE[0])
+    if r:
+        print(f"  furthest below its OWN normal premium vs others: days {r['days']}, price {r['price_spread']:+.2%} "
+              f"(NAV part {r['nav_spread']:+.2%}, premium part {r['premium_part']:+.2%}), wins {r['wins']:.0%}")
+    for label, days in goldfunds.RETURN_WINDOWS.items():
+        m = goldfunds.nav_momentum_test(con, OUT_OF_SAMPLE[0], days)
+        if m:
+            print(f"  top third by past {label} NAV return vs rest: rebalances {m['rebalances']}, "
+                  f"price {m['price_spread']:+.2%}, NAV {m['nav_spread']:+.2%}, wins {m['wins']:.0%}")
 
     print("\n=== Where the exit signal's edge goes (money flow 60d -> gold, test period, CAGR in USD) ===")
     for label, cagr in cost_decomposition(full.slice(*OUT_OF_SAMPLE), EXIT_SIGNALS["money flow 60d"]):

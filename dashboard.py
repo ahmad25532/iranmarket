@@ -3,7 +3,7 @@ Iran Market AI — dashboard (Phase 4).
 
 Shows only what passed the Phase 3 out-of-sample tests, plus context and data health:
 - your portfolio split (stocks / gold / fixed income / cash) against the target you set
-- today's gold funds ranked by premium over NAV, with the liquidity tiers the test used
+- gold funds side by side (NAV returns, premium vs each fund's own normal, liquidity, data warnings)
 - free-market USD, 18k gold, its bubble vs intrinsic value, TEDPIX in dollars (context only)
 - whether today's data is complete and final
 
@@ -23,15 +23,13 @@ from typing import Any, Dict, List, Optional
 import duckdb
 
 import datastore
+import goldfunds
 import sources
 from net import FetchError, HttpClient
 
 PORT = 8085
 PORTFOLIO_PATH = os.path.join(datastore.BASE_DIR, "data", "portfolio.json")
 TEDPIX = "32097828799138957"
-LIQUID_VALUE = 1e11       # rial/day (10B toman), as in the Phase 3 test
-VERY_LARGE_VALUE = 1e12   # rial/day (100B toman)
-LIQUID_TRADES = 100
 
 CLASS_LABELS = {
     "stocks": "سهام و صندوق سهامی",
@@ -175,33 +173,6 @@ def market_snapshot(con: duckdb.DuckDBPyConnection, live: Optional[List[Dict[str
     return out
 
 
-def gold_funds_today(con: duckdb.DuckDBPyConnection) -> List[Dict[str, Any]]:
-    """Each gold fund on its latest trading day in the last 10 days: VWAP premium over same-day NAV and liquidity."""
-    rows = _rows(con, """
-        WITH last AS (
-            SELECT p.ins_code, max(p.d) AS d FROM daily_prices p JOIN gold_funds USING (ins_code)
-            WHERE p.trades > 0 AND p.volume > 0 AND p.d >= (SELECT max(d) FROM daily_prices) - INTERVAL 10 DAY
-            GROUP BY 1),
-        liq AS (
-            SELECT p.ins_code, avg(p.value) AS avg_value FROM daily_prices p JOIN gold_funds USING (ins_code)
-            WHERE p.d >= (SELECT max(d) FROM daily_prices) - INTERVAL 30 DAY GROUP BY 1)
-        SELECT c.ticker, c.name, l.d, p.close, p.value / p.volume AS vwap, p.value, p.trades, n.nav_redeem,
-               (p.value / p.volume) / n.nav_redeem - 1 AS premium, liq.avg_value
-        FROM last l JOIN daily_prices p USING (ins_code, d) JOIN instrument_class c USING (ins_code)
-        JOIN etf_nav n ON n.ins_code = l.ins_code AND n.d = l.d
-        LEFT JOIN liq ON liq.ins_code = l.ins_code
-        WHERE n.nav_redeem > 0 AND abs(p.close / n.nav_redeem - 1) <= 0.30
-        ORDER BY premium""")
-    for r in rows:
-        r["liquid"] = (r["avg_value"] or 0) >= LIQUID_VALUE and r["trades"] >= LIQUID_TRADES
-        r["very_large"] = (r["avg_value"] or 0) >= VERY_LARGE_VALUE
-    # The Phase 3 edge was measured within the >= 10B toman/day tier (which includes the largest funds).
-    cheapest = next((r for r in rows if r["liquid"]), None)
-    for r in rows:
-        r["cheapest_liquid"] = r is cheapest
-    return rows
-
-
 def classify(asset_class: str, is_gold: bool) -> str:
     if is_gold:
         return "gold"
@@ -284,7 +255,7 @@ def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
         "generated_at": datetime.now(),
         "health": health(con),
         "market": market,
-        "gold_funds": gold_funds_today(con),
+        "gold_funds": goldfunds.fund_table(con),
         "portfolio": pf,
         "valuation": value_portfolio(con, pf, market),
         "context": context_series(con),

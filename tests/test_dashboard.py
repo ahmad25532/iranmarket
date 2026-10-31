@@ -41,16 +41,6 @@ def con():
     c.close()
 
 
-def test_cheapest_liquid_fund_skips_thin_funds(con):
-    rows = dashboard.gold_funds_today(con)
-    assert [r["ticker"] for r in rows] == ["كوچك", "زر", "عيار"]          # sorted by premium
-    flags = {r["ticker"]: (r["liquid"], r["very_large"], r["cheapest_liquid"]) for r in rows}
-    assert flags["كوچك"] == (False, False, False)
-    assert flags["زر"] == (True, False, True)
-    assert flags["عيار"] == (True, True, False)
-    assert rows[1]["premium"] == pytest.approx(-0.01)
-
-
 def test_bubble_uses_same_day_prices(con):
     m = dashboard.market_snapshot(con)
     assert m["bubble_date"] == D                                  # not the weekend ounce

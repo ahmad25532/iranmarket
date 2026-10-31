@@ -38,40 +38,40 @@
 
 === Stock exit signals, TEST PERIOD (unseen): 2021-01-02 .. 2026-10-31 ===
   signal                    off-stocks asset          CAGR    CAGR$   MaxDD$   Shrp$ sells  stocks
-  buy and hold              100% stocks              35.1%    -9.9%   -67.4%   -0.16     0    100%
-  buy and hold              100% gold                70.0%    13.4%   -24.3%    0.65     0      0%
-  buy and hold              100% fixed income        26.8%   -15.4%   -70.7%   -0.47     0      0%
-  static mix, no rebalance  1/3 each                 49.9%     0.1%   -38.7%    0.11     0     33%
-  static mix, no rebalance  half stocks half gold    57.0%     4.8%   -33.0%    0.33     0     50%
-  mix, rebalance 60d        1/3 each                 45.2%    -3.1%   -38.9%   -0.03    18     33%
-  mix, rebalance 60d        half stocks half gold    53.3%     2.4%   -34.4%    0.22    13     50%
+  buy and hold              100% stocks              35.1%    -9.8%   -67.4%   -0.16     0    100%
+  buy and hold              100% gold                68.9%    12.8%   -25.8%    0.62     0      0%
+  buy and hold              100% fixed income        26.8%   -15.3%   -70.7%   -0.46     0      0%
+  static mix, no rebalance  1/3 each                 49.3%    -0.3%   -38.7%    0.09     0     33%
+  static mix, no rebalance  half stocks half gold    56.2%     4.3%   -33.0%    0.31     0     50%
+  mix, rebalance 60d        1/3 each                 44.8%    -3.3%   -38.9%   -0.04    18     33%
+  mix, rebalance 60d        half stocks half gold    52.8%     2.1%   -34.4%    0.20    13     50%
   trend 100d                gold                     39.0%    -7.2%   -53.4%   -0.09    36     66%
-  trend 100d                fixed income             30.3%   -13.0%   -67.0%   -0.29    36     66%
+  trend 100d                fixed income             30.4%   -13.0%   -67.0%   -0.29    36     66%
   trend 100d                half gold, half fixed    34.9%    -9.9%   -55.3%   -0.20    54     66%
   trend 200d                gold                     42.3%    -5.0%   -53.6%   -0.01    30     79%
   trend 200d                fixed income             26.9%   -15.3%   -76.1%   -0.37    30     79%
   trend 200d                half gold, half fixed    34.8%   -10.0%   -66.1%   -0.19    45     79%
   trend 200d, 5d confirm    gold                     37.0%    -8.5%   -62.7%   -0.13    18     79%
   trend 200d, 5d confirm    fixed income             22.6%   -18.2%   -80.5%   -0.48    18     79%
-  trend 200d, 5d confirm    half gold, half fixed    30.1%   -13.2%   -72.4%   -0.30    27     79%
-  trend in USD 100d         gold                     38.0%    -7.9%   -48.4%   -0.15    51     44%
+  trend 200d, 5d confirm    half gold, half fixed    30.1%   -13.1%   -72.4%   -0.30    27     79%
+  trend in USD 100d         gold                     37.2%    -8.4%   -48.4%   -0.17    51     44%
   trend in USD 100d         fixed income             26.1%   -15.8%   -72.2%   -0.41    51     44%
-  trend in USD 100d         half gold, half fixed    32.5%   -11.5%   -59.8%   -0.33    76     44%
+  trend in USD 100d         half gold, half fixed    32.1%   -11.8%   -59.8%   -0.34    76     44%
   trend in USD 200d         gold                     35.7%    -9.4%   -54.8%   -0.21    50     40%
   trend in USD 200d         fixed income             11.2%   -25.8%   -86.9%   -0.83    50     40%
   trend in USD 200d         half gold, half fixed    25.3%   -16.4%   -72.7%   -0.56    75     40%
-  money flow 20d            gold                     61.0%     7.5%   -40.5%    0.40    39     26%
+  money flow 20d            gold                     60.0%     6.8%   -40.5%    0.38    39     26%
   money flow 20d            fixed income             37.7%    -8.1%   -57.1%   -0.13    39     26%
-  money flow 20d            half gold, half fixed    49.8%    -0.0%   -39.7%    0.13    58     26%
+  money flow 20d            half gold, half fixed    49.3%    -0.3%   -39.7%    0.12    58     26%
   money flow 60d            gold                     37.4%    -8.3%   -60.7%   -0.18    22     21%
-  money flow 60d            fixed income             22.0%   -18.6%   -76.6%   -0.55    22     21%
+  money flow 60d            fixed income             22.0%   -18.5%   -76.6%   -0.55    22     21%
   money flow 60d            half gold, half fixed    31.1%   -12.5%   -62.4%   -0.41    33     21%
   trend 200d AND flow 60d   gold                     42.3%    -5.0%   -53.6%   -0.01    30     79%
   trend 200d AND flow 60d   fixed income             26.9%   -15.3%   -76.1%   -0.37    30     79%
   trend 200d AND flow 60d   half gold, half fixed    34.8%   -10.0%   -66.1%   -0.19    45     79%
-  stocks vs gold momentum 60dgold (rotation)          36.3%    -9.1%   -54.8%   -0.20    66     36%
+  stocks vs gold momentum 60dgold (rotation)          36.3%    -9.0%   -54.8%   -0.20    66     36%
   stocks vs gold momentum 120dgold (rotation)          43.7%    -4.1%   -56.3%   -0.02    44     32%
-  stocks vs gold momentum 250dgold (rotation)          53.5%     2.5%   -39.7%    0.22    32     23%
+  stocks vs gold momentum 250dgold (rotation)          53.5%     2.5%   -39.7%    0.23    32     23%
 
 === 18k gold bubble vs intrinsic (ounce x free USD) -> next 60 trading days of 18k gold ===
   design: bucket, days, mean fwd 60d return in USD, share positive
@@ -80,7 +80,7 @@
     +2% .. +5%       211     1.6%     69%
     +5% ..            94     2.2%     69%
   test: bucket, days, mean fwd 60d return in USD, share positive
-    .. -2%           130    -0.2%     56%
+    .. -2%           130    -0.3%     55%
     -2% .. +2%       842     5.3%     73%
     +2% .. +5%       320     4.0%     64%
     +5% ..            44    -2.2%     41%
@@ -92,12 +92,12 @@
     +2%..+5%          137     4.6%    13.6%     2.7%
     +5%..+10%          83     9.2%    25.5%     6.5%
     +10%..+1000%      147     7.9%    17.9%    11.2%
-  test: premium bucket, fund-days, mean fwd20, mean fwd60, premium 20d later
-    -100%..+0%       5937     7.7%    21.2%    -0.6%
-    +0%..+2%         4183     6.9%    24.5%     0.1%
-    +2%..+5%          627     5.4%    14.3%     1.1%
+
+    -100%..+0%       5925     7.7%    21.2%    -0.6%
+    +0%..+2%         4199     6.9%    24.5%     0.1%
+    +2%..+5%          628     5.4%    14.3%     1.1%
     +5%..+10%         296     2.8%     8.3%     5.7%
-    +10%..+1000%      293     8.0%    10.8%    11.6%
+    +10%..+1000%      294     8.0%    10.8%    11.6%
 
 === Same day, lowest-premium gold fund minus the other gold funds (gold price moves cancel out) ===
   entry at next day's VWAP; only days with >= 3 funds in the tier (design period has too few funds)
@@ -105,13 +105,22 @@
   all gold funds                            fwd60: days  858, mean spread +1.74%, cheapest wins 69%
   liquid (>=10B toman/day, >=100 trades)    fwd20: days  639, mean spread +1.64%, cheapest wins 66%
   liquid (>=10B toman/day, >=100 trades)    fwd60: days  599, mean spread +1.79%, cheapest wins 64%
-  very large (>=100B toman/day)             fwd20: days  390, mean spread +1.27%, cheapest wins 55%
-  very large (>=100B toman/day)             fwd60: days  349, mean spread -0.11%, cheapest wins 48%
+  very large (>=100B toman/day)             fwd20: days  391, mean spread +1.26%, cheapest wins 55%
+  very large (>=100B toman/day)             fwd60: days  349, mean spread -0.09%, cheapest wins 48%
+  liquid, clean NAV data only               fwd20: days  635, mean spread +0.41%, cheapest wins 62%
+  liquid, clean NAV data only               fwd60: days  595, mean spread +0.58%, cheapest wins 63%
+
+=== Gold fund selection with cleaned NAV (liquid funds, test period, next 60 trading days, price) ===
+  furthest below its OWN normal premium vs others: days 580, price -0.23% (NAV part -1.58%, premium part +1.36%), wins 49%
+  top third by past 1m NAV return vs rest: rebalances 46, price +0.13%, NAV +0.12%, wins 59%
+  top third by past 3m NAV return vs rest: rebalances 46, price +0.18%, NAV -0.09%, wins 67%
+  top third by past 6m NAV return vs rest: rebalances 46, price -0.06%, NAV +0.22%, wins 59%
+  top third by past 12m NAV return vs rest: rebalances 42, price +0.53%, NAV +0.59%, wins 71%
 
 === Where the exit signal's edge goes (money flow 60d -> gold, test period, CAGR in USD) ===
   no costs, no queue locks                    1.5%
-  + fees                                      0.4%
-  + slippage 0.3%                            -1.9%
+  + fees                                      0.5%
+  + slippage 0.3%                            -1.8%
   + market-wide queue locks (realistic)      -8.3%
 
 === Past crises: TEDPIX change in USD, share of the window out of stocks, first exit ===
