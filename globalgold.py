@@ -17,7 +17,7 @@ import csv
 import io
 import zipfile
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import duckdb
 import numpy as np
@@ -277,20 +277,22 @@ SIGNALS = {
 }
 
 
-def tercile_test(p: pl.DataFrame, feature: str, horizon: int = 60) -> Dict[str, Any]:
+def tercile_test(p: pl.DataFrame, feature: str, horizon: int = 60,
+                 periods: Tuple[Tuple[date, date], Tuple[date, date]] = (IN_SAMPLE, OUT_OF_SAMPLE)) -> Dict[str, Any]:
     """
-    Tercile breakpoints come from the design period only and are applied unchanged to the test
-    period. Spread = mean forward return of the top tercile minus the bottom one. The t-stat counts
-    one independent observation per `horizon` days, since overlapping windows are not independent.
+    Tercile breakpoints come from the design period (periods[0]) only and are applied unchanged to
+    the test period (periods[1]). Spread = mean forward return of the top tercile minus the bottom
+    one. The t-stat counts one independent observation per `horizon` days, since overlapping
+    windows are not independent.
     """
     fwd = f"fwd{horizon}"
     d = p.select("d", feature, fwd).drop_nulls().filter(pl.col(feature).is_not_nan())
-    design = d.filter((pl.col("d") >= IN_SAMPLE[0]) & (pl.col("d") <= IN_SAMPLE[1]))
+    design = d.filter((pl.col("d") >= periods[0][0]) & (pl.col("d") <= periods[0][1]))
     if design.height < 500:
         return {"feature": feature}
     lo, hi = np.quantile(design[feature].to_numpy(), [1 / 3, 2 / 3])
     out: Dict[str, Any] = {"feature": feature, "cuts": (float(lo), float(hi)), "horizon": horizon}
-    for name, (a, b) in (("design", IN_SAMPLE), ("test", OUT_OF_SAMPLE)):
+    for name, (a, b) in zip(("design", "test"), periods):
         s = d.filter((pl.col("d") >= a) & (pl.col("d") <= b))
         x, y = s[feature].to_numpy(), s[fwd].to_numpy()
         top, mid, bot = y[x > hi], y[(x >= lo) & (x <= hi)], y[x < lo]

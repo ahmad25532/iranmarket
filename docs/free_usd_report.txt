@@ -1,0 +1,74 @@
+IMF/SCI CPI: 254 months, last (1404, 2); CBI inflation: 269 months, last (1405, 6)
+
+=== Splice check: SCI cut at earlier months, extended with CBI inflation, vs what SCI published ===
+   6 months after the cut: 33 cut points, bias -0.2%, RMS error 5.1%
+  12 months after the cut: 31 cut points, bias -0.5%, RMS error 6.3%
+  16 months after the cut: 30 cut points, bias +0.2%, RMS error 6.8%
+
+=== Iran CPI, last 8 months (est = extended from CBI inflation) ===
+  1404/11  CPI    475.4  y/y +55.6%  est
+  1404/12  CPI    495.5  y/y +56.9%  est
+  1405/01  CPI    525.9  y/y +60.3%  est
+  1405/02  CPI    571.7  y/y +69.7%  est
+  1405/03  CPI    605.2  y/y +76.5%  est
+  1405/04  CPI    632.1  y/y +79.5%  est
+  1405/05  CPI    663.1  y/y +83.1%  est
+  1405/06  CPI    691.8  y/y +83.8%  est
+
+Panel: 2012-01-01 .. 2026-10-29, 3968 days with a free-market price
+Design period 2012-01-01 .. 2018-12-31; test period 2019-01-01 .. 2026-10-29
+
+=== Terciles (design-period cut points) -> free USD over the next 20 TGJU days ===
+  signal       story | design low    high  spread     t |  test low    high  spread     t  verdict
+  rer_dev3y        - |      +0.8%   +5.9%   +5.1%  +1.6 |     +5.6%   +3.1%   -2.5%  -1.1  failed
+  gap              - |      +0.5%   +3.6%   +3.0%  +0.8 |     +4.2%   +3.1%   -1.1%  -0.2  failed
+  infl_accel       + |      +0.7%   -0.0%   -0.7%  -0.4 |     +3.4%   +2.9%   -0.6%  -0.4  weak
+  trend200         + |      +0.5%   +4.0%   +3.5%  +1.3 |     +2.5%   +3.6%   +1.1%  +0.7  weak
+  mom12m           + |      +0.6%   +3.2%   +2.6%  +1.0 |     +3.3%   +3.2%   -0.1%  -0.1  failed
+
+=== Terciles (design-period cut points) -> free USD over the next 60 TGJU days ===
+  signal       story | design low    high  spread     t |  test low    high  spread     t  verdict
+  rer_dev3y        - |      +1.9%  +20.2%  +18.3%  +1.6 |    +17.7%   +8.6%   -9.1%  -1.8  failed
+  gap          not enough data
+  infl_accel       + |      +2.3%   +0.8%   -1.5%  -0.3 |    +11.1%   +8.0%   -3.2%  -0.7  weak
+  trend200         + |      +1.9%  +14.0%  +12.1%  +1.3 |     +9.2%   +9.9%   +0.7%  +0.1  weak
+  mom12m           + |      +2.2%  +11.9%   +9.6%  +0.9 |    +11.8%   +9.5%   -2.3%  -0.4  failed
+
+=== Terciles (design-period cut points) -> free USD over the next 120 TGJU days ===
+  signal       story | design low    high  spread     t |  test low    high  spread     t  verdict
+  rer_dev3y    not enough data
+  gap          not enough data
+  infl_accel       + |      +3.7%  +10.7%   +7.0%  +0.6 |    +23.7%  +14.5%   -9.1%  -0.9  failed
+  trend200         + |      +5.2%  +29.8%  +24.6%  +1.0 |    +20.1%  +18.2%   -1.9%  -0.2  failed
+  mom12m           + |      +5.0%  +26.3%  +21.3%  +0.8 |    +18.8%  +17.9%   -0.9%  -0.1  failed
+
+=== Trend timing: dollars above the 200-day average, else a 20% rial deposit (0.5% per switch), in rial ===
+  design hold     CAGR +20.8%  MaxDD -48.0%  in USD 100%  switches 0
+  design trend    CAGR +21.9%  MaxDD -48.0%  in USD 83%  switches 18
+  design deposit  CAGR +20.0%  MaxDD +0.0%  in USD 0%  switches 0
+  test   hold     CAGR +51.5%  MaxDD -35.2%  in USD 100%  switches 0
+  test   trend    CAGR +41.7%  MaxDD -39.5%  in USD 87%  switches 48
+  test   deposit  CAGR +20.0%  MaxDD +0.0%  in USD 0%  switches 0
+
+=== Real rate (free USD x US CPI / Iran CPI), yearly average, 2012-2018 average = 100 ===
+  2012  index    98   free USD       22,833
+  2013  index   109   free USD       33,068
+  2014  index    90   free USD       31,738
+  2015  index    85   free USD       33,672
+  2016  index    84   free USD       35,389
+  2017  index    87   free USD       38,821
+  2018  index   160   free USD       86,743
+  2019  index   179   free USD      124,893
+  2020  index   228   free USD      207,749
+  2021  index   211   free USD      258,870
+  2022  index   191   free USD      309,168
+  2023  index   220   free USD      496,443
+  2024  index   213   free USD      620,828
+  2025  index   250   free USD      977,156
+  2026  index   311   free USD    1,854,115
+  design  real rate +4.3% a year (log-linear fit), +99% first to last day
+  test    real rate +5.2% a year (log-linear fit), +107% first to last day
+
+=== Today (2026-10-29) ===
+  free 2,710,600  official 1,867,928  gap +45%
+  real index 357; vs its 3-year average +43%

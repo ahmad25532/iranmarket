@@ -25,6 +25,7 @@ import duckdb
 
 import adjust
 import datastore
+import freeusd
 import globalgold
 import quality
 import sources
@@ -245,9 +246,11 @@ def refresh_tgju(run: Run, length: int) -> None:
 
 
 def refresh_global(run: Run, full: bool) -> None:
-    """Global gold drivers (Yahoo, US Treasury, CFTC); these hosts are reached over the default route."""
+    """Global gold drivers (Yahoo, US Treasury, CFTC) and the free-USD inputs (TGJU, CBI, IMF, BLS)."""
     counts = globalgold.refresh(run, full)
     print("  global gold: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
+    counts = freeusd.refresh(run, full)
+    print("  free USD inputs: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
 
 
 def store_live_macro(con: duckdb.DuckDBPyConnection, rows: List[Dict[str, Any]]) -> int:
@@ -359,6 +362,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
         quality.check_gaps("gaps_nav", remaining("etf_nav", "nav", days[:-3])),
         quality.check_macro_freshness(con, today, list(sources.TGJU_SERIES)),
         quality.check_global_freshness(con, today),
+        quality.check_usd_inputs_freshness(con, today),
         quality.check_fetch_errors(con, run.id),
     ]
     return 1 if quality.save_and_summarize(con, run.id, d, checks) else 0
@@ -433,6 +437,7 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
     checks = [
         quality.check_macro_freshness(con, date.today(), list(sources.TGJU_SERIES)),
         quality.check_global_freshness(con, date.today()),
+        quality.check_usd_inputs_freshness(con, date.today()),
         quality.check_fetch_errors(con, run.id),
     ]
     return 1 if quality.save_and_summarize(con, run.id, None, checks) else 0
@@ -480,7 +485,7 @@ def main() -> int:
     p_back.add_argument("--limit", type=int)
     p_back.add_argument("--refresh", action="store_true", help="re-download instruments already backfilled")
     sub.add_parser("status")
-    sub.add_parser("global", help="re-download the full history of the global gold drivers only")
+    sub.add_parser("global", help="re-download the full history of the global gold and free-USD drivers only")
     ap.add_argument("--db", default=datastore.DEFAULT_DB_PATH)
     args = ap.parse_args()
 

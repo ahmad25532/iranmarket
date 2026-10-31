@@ -143,6 +143,16 @@ CREATE TABLE IF NOT EXISTS cot_gold (
     sw_long  DOUBLE, sw_short  DOUBLE    -- swap dealers (bullion banks)
 );
 
+-- Monthly price indexes and inflation. A value covers the month ending period_end and is public from
+-- released_d. Iranian months are Jalali, so their period_end falls around the 20th-22nd.
+CREATE TABLE IF NOT EXISTS monthly_macro (
+    series      VARCHAR,
+    period_end  DATE,
+    value       DOUBLE,
+    released_d  DATE,
+    PRIMARY KEY (series, period_end)
+);
+
 -- One row per market date for which an end-of-day snapshot was taken (final = market was closed).
 CREATE TABLE IF NOT EXISTS snapshots (
     d         DATE PRIMARY KEY,
@@ -200,6 +210,7 @@ TABLE_KEYS = {
     "macro_daily": ["series", "d"],
     "global_daily": ["series", "d"],
     "cot_gold": ["report_d"],
+    "monthly_macro": ["series", "period_end"],
     "backfill_status": ["ins_code", "kind"],
     "snapshots": ["d"],
     "filled_days": ["d", "kind"],

@@ -129,6 +129,23 @@ def check_global_freshness(con: duckdb.DuckDBPyConnection, today: date) -> Check
     return ("global_freshness", "ok", f"{len(rows)} global series + COT up to date")
 
 
+def check_usd_inputs_freshness(con: duckdb.DuckDBPyConnection, today: date) -> Check:
+    """
+    NIMA trades on Iranian working days; CBI inflation and US CPI come monthly, about a month after
+    the month ends. The IMF's Iran CPI stopped in 2025 and is extended from CBI data, so it is not checked.
+    """
+    nima = _scalar(con, "SELECT max(d) FROM macro_daily WHERE series = 'usd_nima_irr'")
+    monthly = dict(con.execute("SELECT series, max(period_end) FROM monthly_macro GROUP BY series").fetchall())
+    if nima is None or not monthly:
+        return ("usd_inputs_freshness", "warn", "no free-USD inputs yet (run: collector.py global)")
+    stale = [f"usd_nima_irr:{nima}"] if (today - nima).days > 7 else []
+    stale += [f"{s}:{monthly.get(s)}" for s in ("infl12_ir_cbi", "cpi_us")
+              if monthly.get(s) is None or (today - monthly[s]).days > 75]
+    if stale:
+        return ("usd_inputs_freshness", "warn", "stale free-USD inputs: " + ", ".join(stale))
+    return ("usd_inputs_freshness", "ok", "NIMA, CBI inflation and US CPI up to date")
+
+
 def check_fetch_errors(con: duckdb.DuckDBPyConnection, run_id: str) -> Check:
     total, errors = con.execute(
         "SELECT count(*), count(*) FILTER (WHERE status = 'error') FROM fetch_log WHERE run_id = ?", [run_id]

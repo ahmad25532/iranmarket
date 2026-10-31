@@ -179,6 +179,34 @@ ul.plain li { padding: 3px 0; }
     </details>
   </section>
 
+  <section class="card" style="margin-bottom:16px" id="usd-section">
+    <h2>دلار آزاد</h2>
+    <div class="sub">دلار آزاد بیشترِ نوسان طلای ۱۸ عیار را می‌سازد. پنج سیگنال رایج (ارزانی یا گرانی دلار نسبت به تورم، فاصله با نرخ رسمی، شتاب تورم، روند و مومنتوم) روی داده‌های ۱۳۹۰ تا امروز آزمون شدند و هیچ‌کدام در دوره آزمون تأیید نشد. این بخش زمینه است، نه سیگنال.</div>
+    <div class="sub" id="usd-meta" style="margin-top:4px"></div>
+    <div class="kpis" id="usd-kpis" style="margin-top:12px"></div>
+    <div class="grid" style="margin-bottom:0">
+      <div>
+        <h3 class="h3">دلار آزاد و نرخ رسمی</h3>
+        <div class="sub">نرخ رسمی: سنا تا آبان ۱۳۹۷، بعد از آن نیما. پایان ماه، تومان، مقیاس لگاریتمی.</div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>دلار آزاد</span><span><i style="background:var(--faint)"></i>نرخ رسمی</span></div>
+        <div class="chart"><canvas id="c-usd" role="img" aria-label="دلار آزاد و نرخ رسمی، ماهانه"></canvas></div>
+      </div>
+      <div>
+        <h3 class="h3">دلار واقعی: تعدیل‌شده با تورم ایران و آمریکا</h3>
+        <div class="sub">۱۰۰ = میانگین ۱۳۹۱ تا ۱۳۹۷. بالاتر یعنی دلار نسبت به قیمت کالاها در ایران گران‌تر شده. این خط به میانگین قدیمش برنگشته است.</div>
+        <div class="legend"><span><i style="background:var(--warn)"></i>دلار واقعی</span></div>
+        <div class="chart"><canvas id="c-rer" role="img" aria-label="نرخ واقعی دلار آزاد، شاخص ماهانه"></canvas></div>
+      </div>
+    </div>
+    <div class="sub" id="usd-cpi-note" style="margin-top:8px"></div>
+    <details style="margin-top:12px"><summary>نتیجه آزمون سیگنال‌های زمان‌بندی دلار</summary>
+      <div class="sub" id="usd-periods" style="margin:6px 0"></div>
+      <div class="tablewrap"><table><thead><tr><th>سیگنال</th><th>انتظار رایج</th><th>۲۰ روز بعد: طراحی / آزمون</th><th>۶۰ روز بعد: طراحی / آزمون</th></tr></thead>
+      <tbody id="usd-signals"></tbody></table></div>
+      <div class="sub" id="usd-trend" style="margin-top:8px"></div>
+    </details>
+  </section>
+
   <section class="grid">
     <div class="card">
       <h2>شاخص کل به دلار آزاد</h2>
@@ -202,6 +230,7 @@ ul.plain li { padding: 3px 0; }
         <li><span class="badge fail">رد شد</span> چرخش سهام و طلا با مومنتوم</li>
         <li><span class="badge fail">رد شد</span> زمان‌بندی خرید طلا با حباب ۱۸ عیار یا حباب صندوق</li>
         <li><span class="badge fail">تأیید نشد</span> زمان‌بندی انس با روند، بازده واقعی، دلار، COT، نوسان و ارزش منصفانه</li>
+        <li><span class="badge fail">تأیید نشد</span> زمان‌بندی دلار آزاد با نرخ واقعی، فاصله با نیما، شتاب تورم، روند و مومنتوم</li>
         <li><span class="badge info">آزمون نشده</span> سیگنال‌های خبری و انتخاب سهم</li>
       </ul>
       <div class="sub" style="margin-top:8px">دلیل اصلی رد شدن سیگنال‌های خروج: در بحران‌ها بازار در صف فروش است و نمی‌شود خارج شد. جزئیات: <span class="ltr">docs/phase3_findings.md</span></div>
@@ -437,6 +466,70 @@ function renderGlobal(g) {
   });
 }
 
+const JMONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+const jmonth = ym => JMONTHS[ym[1] - 1] + ' ' + fa(ym[0]).replace(/٬/g, '');
+
+function renderUsd(u) {
+  if (!u || !u.available) {
+    document.getElementById('usd-meta').textContent = 'داده‌های تورم و نرخ رسمی هنوز دریافت نشده‌اند. یک بار اجرا کنید: collector.py global';
+    return;
+  }
+  document.getElementById('usd-meta').innerHTML = 'دلار تا ' + jdate(u.as_of) +
+    (u.infl12 ? ' · تورم بانک مرکزی تا ' + jmonth(u.infl12.month) : '');
+  const kpi = ([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`;
+  document.getElementById('usd-kpis').innerHTML = [
+    ['دلار آزاد', fa(toman(u.usd)) + ' تومان', 'بازده ۱۲ ماه ' + (u.mom12m == null ? '-' : pct(u.mom12m, 0))],
+    ['فاصله با نرخ رسمی', u.gap == null ? '-' : pct(u.gap, 0), u.official ? 'نیما ' + fa(toman(u.official)) + ' تومان' : ''],
+    ['تورم ۱۲ ماهه (بانک مرکزی)', u.infl12 ? fa(u.infl12.value, 1) + '٪' : '-', u.infl12 ? jmonth(u.infl12.month) : ''],
+    ['تورم نقطه به نقطه', u.cpi_yoy.value == null ? '-' : pct(u.cpi_yoy.value, 0), jmonth(u.cpi_yoy.month) + (u.cpi_yoy.estimated ? '، تخمینی' : '')],
+    ['دلار واقعی', u.rer_index == null ? '-' : fa(u.rer_index, 0), '۱۰۰ = میانگین ۹۱ تا ۹۷'],
+    ['دلار واقعی نسبت به ۳ سال اخیر', u.rer_dev3y == null ? '-' : pct(u.rer_dev3y, 0), 'در آزمون پیش‌بینی‌کننده نبود'],
+  ].map(kpi).join('');
+
+  const rt = u.real_trend;
+  document.getElementById('usd-cpi-note').innerHTML = (rt.design && rt.test ? `دلار واقعی در دوره طراحی سالانه حدود ${pct(rt.design.per_year)} و در دوره آزمون ${pct(rt.test.per_year)} گران‌تر شده؛ ` +
+    'یعنی ریال به‌طور ساختاری ارزش واقعی از دست داده و «برگشت دلار به میانگین تورمی» در این ۱۴ سال رخ نداده. ' : '') +
+    (u.cpi_published_to ? `شاخص قیمت مرکز آمار (از طریق صندوق بین‌المللی پول) تا ${jmonth(u.cpi_published_to)} موجود است؛ ` +
+      'ماه‌های بعد از روی تورم بانک مرکزی تخمین زده شده‌اند (خطای معمول این تخمین در گذشته حدود ۵ تا ۷ درصد بوده).' : '');
+
+  const p = u.periods;
+  document.getElementById('usd-periods').innerHTML = `مرزهای سه‌گانه فقط از دوره طراحی (${jdate(p.design[0])} تا ${jdate(p.design[1])}) آمده و بدون تغییر روی دوره آزمون (${jdate(p.test[0])} تا ${jdate(p.test[1])}) اجرا شده. عدد = میانگین بازده دلار آزاد وقتی سیگنال در یک‌سوم بالا بوده منهای وقتی در یک‌سوم پایین بوده.`;
+  const cell = h => {
+    const [cls, label] = VERDICT[h.verdict];
+    const x = (s, t) => s == null ? '-' : pct(s) + ` <span class="muted">(t=${fa(t, 1)})</span>`;
+    return `${x(h.design_spread, h.design_t)} / ${x(h.test_spread, h.test_t)} <span class="badge ${cls}">${label}</span>`;
+  };
+  document.getElementById('usd-signals').innerHTML = u.signals.map(s =>
+    `<tr><td>${esc(s.label)}</td><td>${s.textbook_sign > 0 ? 'بالاتر = دلار بیشتر بالا می‌رود' : 'بالاتر = دلار کمتر بالا می‌رود'}</td><td>${cell(s.h20)}</td><td>${cell(s.h60)}</td></tr>`).join('');
+  const tt = u.trend_timing.test;
+  document.getElementById('usd-trend').innerHTML = `نگه‌داشتن دلار فقط وقتی بالای میانگین ۲۰۰ روزه است (و سپرده ریالی ۲۰٪ در بقیه زمان، ۰٫۵٪ هزینه هر جابه‌جایی) در دوره آزمون: بازده سالانه ${pct(tt.trend.cagr)} در برابر ${pct(tt.hold.cagr)} نگه‌داشتن دائم، بیشترین افت ${pct(tt.trend.maxdd, 0)} در برابر ${pct(tt.hold.maxdd, 0)}. یعنی دنبال کردن روند هم بازده کمتر داشت و هم افت بیشتر.`;
+
+  const rows = u.monthly;
+  const accent = css('--accent'), warn = css('--warn'), grid = css('--grid'), muted = css('--faint');
+  const xTicks = {color: muted, maxTicksLimit: 8, maxRotation: 0, callback: function (v) { return this.getLabelForValue(v).slice(0, 4); }};
+  if (charts['c-usd']) charts['c-usd'].destroy();
+  charts['c-usd'] = new Chart(document.getElementById('c-usd'), {
+    type: 'line',
+    data: {labels: rows.map(r => r.m), datasets: [
+      {data: rows.map(r => toman(r.usd)), borderColor: accent, borderWidth: 2, pointRadius: 0, tension: 0.2},
+      {data: rows.map(r => r.official == null ? null : toman(r.official)), borderColor: muted, borderWidth: 2, pointRadius: 0, tension: 0.2}]},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {rtl: true, callbacks: {label: c => (c.datasetIndex ? ' رسمی ' : ' آزاد ') + fa(c.parsed.y) + ' تومان'}}},
+      scales: {x: {grid: {display: false}, ticks: xTicks},
+        y: {type: 'logarithmic', grid: {color: grid}, border: {display: false}, ticks: {color: muted, maxTicksLimit: 6, callback: v => fa(v)}}}}
+  });
+  if (charts['c-rer']) charts['c-rer'].destroy();
+  charts['c-rer'] = new Chart(document.getElementById('c-rer'), {
+    type: 'line',
+    data: {labels: rows.map(r => r.m), datasets: [
+      {data: rows.map(r => r.rer_index), borderColor: warn, borderWidth: 2, pointRadius: 0, tension: 0.2}]},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {rtl: true, callbacks: {label: c => ' دلار واقعی ' + fa(c.parsed.y)}}},
+      scales: {x: {grid: {display: false}, ticks: xTicks},
+        y: {grid: {color: c => c.tick.value === 100 ? muted : grid}, border: {display: false}, ticks: {color: muted, maxTicksLimit: 6, callback: v => fa(v)}}}}
+  });
+}
+
 function render(s) {
   current = s;
   renderHealth(s.health);
@@ -446,6 +539,7 @@ function render(s) {
   lineChart('c-ted', s.context.tedpix_usd, {});
   lineChart('c-bub', s.context.gold18_bubble, {base: 0, suffix: '٪'});
   renderGlobal(s.global_gold);
+  renderUsd(s.free_usd);
 }
 
 async function load() {

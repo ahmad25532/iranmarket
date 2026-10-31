@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 import duckdb
 
 import datastore
+import freeusd
 import globalgold
 import goldfunds
 import sources
@@ -263,6 +264,7 @@ def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
         "valuation": value_portfolio(con, pf, market),
         "context": context_series(con),
         "global_gold": globalgold.dashboard(con),
+        "free_usd": freeusd.dashboard(con),
     }
 
 
