@@ -73,10 +73,37 @@ WHERE i.paper_type IN (1, 2, 8)
 """
 
 
+# Fund names and Fipiran types do not reliably say what a fund holds (several gold funds are
+# registered as generic "commodity" or not matched at all), so gold funds are identified by
+# behaviour: over the last ~400 days their daily returns track 18k gold closely, with similar
+# volatility. Silver funds correlate less (~0.5-0.7) and are more volatile.
+GOLD_MIN_CORR = 0.76
+GOLD_VOL_RATIO = (0.80, 1.15)
+GOLD_SQL = f"""
+CREATE OR REPLACE TABLE gold_funds AS
+WITH g AS (
+    SELECT d, close / lag(close) OVER (ORDER BY d) - 1 AS gr FROM macro_daily WHERE series = 'gold_18k_irr'
+),
+e AS (
+    SELECT p.ins_code, p.d, p.adj_close / lag(p.adj_close) OVER (PARTITION BY p.ins_code ORDER BY p.d) - 1 AS r
+    FROM price_adj p JOIN instruments i USING (ins_code)
+    WHERE i.paper_type = 8 AND p.trades > 0 AND p.d >= (SELECT max(d) FROM price_adj) - INTERVAL 400 DAY
+)
+SELECT ins_code, count(*) AS days, corr(e.r, g.gr) AS gold_corr, stddev(e.r) / stddev(g.gr) AS vol_ratio
+FROM e JOIN g USING (d)
+GROUP BY ins_code
+HAVING count(*) >= 60 AND corr(e.r, g.gr) >= {GOLD_MIN_CORR}
+   AND stddev(e.r) / stddev(g.gr) BETWEEN {GOLD_VOL_RATIO[0]} AND {GOLD_VOL_RATIO[1]}
+"""
+
+
 def build(con: duckdb.DuckDBPyConnection) -> dict:
-    """Rebuilds price_adj and instrument_class from the raw tables. Returns a short summary."""
+    """Rebuilds price_adj, instrument_class and gold_funds from the raw tables. Returns a short summary."""
     con.execute(BUILD_SQL)
     con.execute(CLASS_SQL)
+    con.execute(GOLD_SQL)
+    # Gold funds without a Fipiran match pay commodity-fund fees, not equity-fund fees.
+    con.execute("UPDATE instrument_class SET asset_class = 'etf_commodity' WHERE ins_code IN (SELECT ins_code FROM gold_funds)")
     rows, events, bad, buy_q, sell_q = con.execute(
         """SELECT count(*), count(*) FILTER (WHERE event_factor <> 1), count(*) FILTER (WHERE bad_factor),
                   count(*) FILTER (WHERE buy_locked), count(*) FILTER (WHERE sell_locked) FROM price_adj"""

@@ -85,23 +85,28 @@
     +2% .. +5%       320     4.0%     64%
     +5% ..            44    -2.2%     41%
 
-=== Gold ETF premium over NAV -> next 20 / 60 trading days of the fund (all gold/commodity funds) ===
+=== Gold ETF premium over NAV -> next 20 / 60 trading days of the fund (gold funds, VWAP) ===
   design: premium bucket, fund-days, mean fwd20, mean fwd60, premium 20d later
-    -100%..+0%        191     1.2%     3.2%     0.2%
-    +0%..+2%          185     1.9%    10.4%     1.0%
-    +2%..+5%           52     2.4%     6.5%     2.9%
-    +5%..+10%          49    11.8%    35.2%     7.9%
-    +10%..+1000%       97    11.3%    27.0%    13.4%
+    -100%..+0%        469     3.9%    12.9%    -0.3%
+    +0%..+2%          401     3.6%    14.2%     1.2%
+    +2%..+5%          137     4.6%    13.6%     2.7%
+    +5%..+10%          83     9.2%    25.5%     6.5%
+    +10%..+1000%      147     7.9%    17.9%    11.2%
   test: premium bucket, fund-days, mean fwd20, mean fwd60, premium 20d later
-    -100%..+0%       1495     7.4%    19.5%    -0.2%
-    +0%..+2%         1414     5.6%    21.2%     0.3%
-    +2%..+5%          227     5.9%    17.2%     1.4%
-    +5%..+10%          57    -0.0%     7.4%     1.7%
-    +10%..+1000%       16     8.0%    19.8%     1.8%
+    -100%..+0%       5937     7.7%    21.2%    -0.6%
+    +0%..+2%         4183     6.9%    24.5%     0.1%
+    +2%..+5%          627     5.4%    14.3%     1.1%
+    +5%..+10%         296     2.8%     8.3%     5.7%
+    +10%..+1000%      293     8.0%    10.8%    11.6%
 
 === Same day, lowest-premium gold fund minus the other gold funds (gold price moves cancel out) ===
-  fwd20 test: days 357, mean spread +0.49%, cheapest wins 65%; when premiums differ by >2pts: days 174, mean +0.54%
-  fwd60 test: days 317, mean spread +0.42%, cheapest wins 68%; when premiums differ by >2pts: days 142, mean +0.57%
+  entry at next day's VWAP; only days with >= 3 funds in the tier (design period has too few funds)
+  all gold funds                            fwd20: days  898, mean spread +1.35%, cheapest wins 67%
+  all gold funds                            fwd60: days  858, mean spread +1.74%, cheapest wins 69%
+  liquid (>=10B toman/day, >=100 trades)    fwd20: days  639, mean spread +1.64%, cheapest wins 66%
+  liquid (>=10B toman/day, >=100 trades)    fwd60: days  599, mean spread +1.79%, cheapest wins 64%
+  very large (>=100B toman/day)             fwd20: days  390, mean spread +1.27%, cheapest wins 55%
+  very large (>=100B toman/day)             fwd60: days  349, mean spread -0.11%, cheapest wins 48%
 
 === Where the exit signal's edge goes (money flow 60d -> gold, test period, CAGR in USD) ===
   no costs, no queue locks                    1.5%

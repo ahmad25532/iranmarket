@@ -306,21 +306,32 @@ def gold18_bubble(p: Panel) -> np.ndarray:
 def gold_etf_premium(con: duckdb.DuckDBPyConnection) -> pl.DataFrame:
     """
     Daily premium of each gold fund's traded price over its redemption NAV, with the fund's
-    forward returns. Silver/saffron funds are excluded (different asset), and |premium| > 30%
-    is treated as a NAV/price unit mismatch rather than a real premium.
+    forward returns. Gold funds come from adjust.gold_funds (identified by tracking 18k gold);
+    |premium| > 30% is treated as a NAV/price unit mismatch rather than a real premium.
     """
+    # Premium uses the day's VWAP (not the closing price, which goes stale on thin days), and
+    # forward returns run from the next day's VWAP, i.e. a price someone could actually get.
     return pl.from_arrow(con.sql(
         """WITH x AS (
-               SELECT p.ins_code, p.d, p.adj_close, d.close / n.nav_redeem - 1 AS premium
+               SELECT p.ins_code, p.d, p.adj_vwap, d.value, d.trades,
+                      (d.value / d.volume) / n.nav_redeem - 1 AS premium
                FROM price_adj p JOIN daily_prices d USING (ins_code, d) JOIN etf_nav n USING (ins_code, d)
-               JOIN instrument_class c USING (ins_code)
-               WHERE c.asset_class = 'etf_commodity' AND c.name LIKE '%طلا%'
-                 AND d.trades > 0 AND n.nav_redeem > 0 AND abs(d.close / n.nav_redeem - 1) <= 0.30)
-           SELECT *, lead(adj_close, 20) OVER w / adj_close - 1 AS fwd20,
-                     lead(adj_close, 60) OVER w / adj_close - 1 AS fwd60,
+               JOIN gold_funds USING (ins_code)
+               WHERE d.trades > 0 AND d.volume > 0 AND n.nav_redeem > 0
+                 AND abs(d.close / n.nav_redeem - 1) <= 0.30)
+           SELECT *, lead(adj_vwap, 21) OVER w / lead(adj_vwap, 1) OVER w - 1 AS fwd20,
+                     lead(adj_vwap, 61) OVER w / lead(adj_vwap, 1) OVER w - 1 AS fwd60,
                      lead(premium, 20) OVER w AS premium_20d_later
            FROM x WINDOW w AS (PARTITION BY ins_code ORDER BY d)"""
     ).to_arrow_table())
+
+
+# Liquidity tiers for the cheapest-fund comparison (traded value in rial, trades per day).
+LIQUIDITY_TIERS = {
+    "all gold funds": (0.0, 0),
+    "liquid (>=10B toman/day, >=100 trades)": (1e11, 100),
+    "very large (>=100B toman/day)": (1e12, 100),
+}
 
 
 def cheapest_fund_spread(g: pl.DataFrame, horizon: str = "fwd60") -> pl.DataFrame:
@@ -413,7 +424,7 @@ def report(con: duckdb.DuckDBPyConnection) -> None:
         for label, n, mean, pos in bucket_study(np.where(mask, bub, np.nan), fwd, [-0.02, 0.02, 0.05]):
             print(f"    {label:<14}{n:>6}{mean:>9.1%}{pos:>8.0%}")
 
-    print("\n=== Gold ETF premium over NAV -> next 20 / 60 trading days of the fund (all gold/commodity funds) ===")
+    print("\n=== Gold ETF premium over NAV -> next 20 / 60 trading days of the fund (gold funds, VWAP) ===")
     g = gold_etf_premium(con)
     for title, (a, b) in (("design", IN_SAMPLE), ("test", OUT_OF_SAMPLE)):
         s = g.filter((pl.col("d") >= a) & (pl.col("d") <= b))
@@ -425,15 +436,14 @@ def report(con: duckdb.DuckDBPyConnection) -> None:
                       f"{b_['fwd60'].mean():>9.1%}{b_['premium_20d_later'].mean():>9.1%}")
 
     print("\n=== Same day, lowest-premium gold fund minus the other gold funds (gold price moves cancel out) ===")
-    for horizon in ("fwd20", "fwd60"):
-        sp = cheapest_fund_spread(g, horizon)
-        for title, (a, b) in (("design", IN_SAMPLE), ("test", OUT_OF_SAMPLE)):
-            s = sp.filter((pl.col("d") >= a) & (pl.col("d") <= b))
+    print("  entry at next day's VWAP; only days with >= 3 funds in the tier (design period has too few funds)")
+    for tier, (min_value, min_trades) in LIQUIDITY_TIERS.items():
+        gt = g.filter((pl.col("value") >= min_value) & (pl.col("trades") >= min_trades))
+        for horizon in ("fwd20", "fwd60"):
+            s = cheapest_fund_spread(gt, horizon).filter(pl.col("d") >= OUT_OF_SAMPLE[0])
             if s.height:
-                wide = s.filter(pl.col("max_premium") - pl.col("min_premium") > 0.02)
-                print(f"  {horizon} {title}: days {s.height}, mean spread {s['spread'].mean():+.2%}, "
-                      f"cheapest wins {float((s['spread'] > 0).mean()):.0%}; "
-                      f"when premiums differ by >2pts: days {wide.height}, mean {wide['spread'].mean() if wide.height else float('nan'):+.2%}")
+                print(f"  {tier:<42}{horizon}: days {s.height:>4}, mean spread {s['spread'].mean():+.2%}, "
+                      f"cheapest wins {float((s['spread'] > 0).mean()):.0%}")
 
     print("\n=== Where the exit signal's edge goes (money flow 60d -> gold, test period, CAGR in USD) ===")
     for label, cagr in cost_decomposition(full.slice(*OUT_OF_SAMPLE), EXIT_SIGNALS["money flow 60d"]):
