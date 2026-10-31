@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS client_flows (
     PRIMARY KEY (ins_code, d)
 );
 
--- ETF NAV has no public history endpoint, so it is captured every day from now on.
+-- ETF NAV per unit (rial). 'tsetmc' rows are the daily snapshot; 'fipiran' rows are the
+-- official end-of-day history and only fill days the snapshot missed.
 CREATE TABLE IF NOT EXISTS etf_nav (
     ins_code     VARCHAR,
     d            DATE,
@@ -69,6 +70,15 @@ CREATE TABLE IF NOT EXISTS etf_nav (
     nav_time     INTEGER,  -- hEven of the published NAV (HHMMSS)
     close        DOUBLE,
     PRIMARY KEY (ins_code, d)
+);
+ALTER TABLE etf_nav ADD COLUMN IF NOT EXISTS source VARCHAR;
+
+-- Maps exchange-traded funds (TSETMC insCode) to their Fipiran registration number.
+CREATE TABLE IF NOT EXISTS fipiran_funds (
+    ins_code   VARCHAR PRIMARY KEY,
+    reg_no     VARCHAR,
+    name       VARCHAR,
+    fund_type  INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS indices (
@@ -110,9 +120,25 @@ CREATE TABLE IF NOT EXISTS macro_daily (
     PRIMARY KEY (series, d)
 );
 
+-- One row per market date for which an end-of-day snapshot was taken (final = market was closed).
+CREATE TABLE IF NOT EXISTS snapshots (
+    d         DATE PRIMARY KEY,
+    taken_at  TIMESTAMP,
+    final     BOOLEAN
+);
+
+-- Trading days already re-filled from official history. A day that is still thin afterwards
+-- (e.g. a near-empty session) is genuine, so it is not re-fetched on every run.
+CREATE TABLE IF NOT EXISTS filled_days (
+    d         DATE,
+    kind      VARCHAR,   -- 'prices_flows' | 'nav'
+    filled_at TIMESTAMP,
+    PRIMARY KEY (d, kind)
+);
+
 CREATE TABLE IF NOT EXISTS backfill_status (
     ins_code     VARCHAR,
-    kind         VARCHAR,   -- 'prices' | 'flows'
+    kind         VARCHAR,   -- 'prices' | 'flows' | 'nav'
     rows         INTEGER,
     completed_at TIMESTAMP,
     PRIMARY KEY (ins_code, kind)
@@ -144,11 +170,14 @@ TABLE_KEYS = {
     "daily_prices": ["ins_code", "d"],
     "client_flows": ["ins_code", "d"],
     "etf_nav": ["ins_code", "d"],
+    "fipiran_funds": ["ins_code"],
     "indices": ["index_code"],
     "index_daily": ["index_code", "d"],
     "market_overview": ["market", "d"],
     "macro_daily": ["series", "d"],
     "backfill_status": ["ins_code", "kind"],
+    "snapshots": ["d"],
+    "filled_days": ["d", "kind"],
 }
 
 
@@ -165,11 +194,13 @@ def upsert(
     table: str,
     rows: Iterable[Dict[str, Any]],
     preserve_existing: Optional[List[str]] = None,
+    keep_existing: bool = False,
 ) -> int:
     """
     Inserts rows, replacing any existing row with the same primary key.
     Columns listed in preserve_existing keep their stored value when the new value is NULL
     (e.g. a snapshot must not wipe flow values that came from the official history).
+    keep_existing=True only inserts missing keys and returns how many were added.
     """
     rows = list(rows)
     if not rows:
@@ -180,6 +211,11 @@ def upsert(
     df = df.unique(subset=keys, keep="last")
     con.register("_incoming", df.to_arrow())
     try:
+        if keep_existing:
+            col_list = ", ".join(cols)
+            before = con.execute(f"SELECT count(*) FROM {table}").fetchall()[0][0]
+            con.execute(f"INSERT OR IGNORE INTO {table} ({col_list}) SELECT {col_list} FROM _incoming")
+            return con.execute(f"SELECT count(*) FROM {table}").fetchall()[0][0] - before
         if preserve_existing:
             sel = ", ".join(
                 f"COALESCE(i.{c}, t.{c}) AS {c}" if c in preserve_existing else f"i.{c}" for c in cols

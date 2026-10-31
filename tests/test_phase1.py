@@ -143,6 +143,38 @@ def test_fetch_errors_fail_above_ten_percent(con):
     assert quality.check_fetch_errors(con, "nothing")[1] == "fail"
 
 
+def test_parse_fipiran_nav():
+    row = sources.parse_fipiran_nav(
+        {"date": "2026-10-27T00:00:00", "issueNav": 711317.0, "cancelNav": 708098.0, "statisticalNav": 708098.0},
+        "34144395039913458",
+    )
+    assert row["d"] == date(2026, 10, 27) and row["nav_redeem"] == 708098.0 and row["nav_issue"] == 711317.0
+    assert row["source"] == "fipiran"
+    assert sources.parse_fipiran_nav({"date": "bad", "cancelNav": 1.0}, "1") is None
+
+
+def test_keep_existing_does_not_overwrite_snapshot_nav(con):
+    datastore.upsert(con, "etf_nav", [{"ins_code": "1", "d": D, "nav_redeem": 100.0, "source": "tsetmc"}])
+    added = datastore.upsert(con, "etf_nav", [
+        {"ins_code": "1", "d": D, "nav_redeem": 99.0, "source": "fipiran"},
+        {"ins_code": "1", "d": date(2026, 10, 27), "nav_redeem": 98.0, "source": "fipiran"},
+    ], keep_existing=True)
+    assert added == 1
+    assert con.execute("SELECT nav_redeem, source FROM etf_nav WHERE d = ?", [D]).fetchone() == (100.0, "tsetmc")
+
+
+def test_find_gaps(con):
+    days = [date(2026, 10, x) for x in (25, 26, 27, 28)]
+    rows = [{"ins_code": str(i), "d": d, "close": 1.0} for d in days if d != date(2026, 10, 27) for i in range(10)]
+    rows += [{"ins_code": "0", "d": date(2026, 10, 27), "close": 1.0}]  # thin day: 1 row vs 10
+    datastore.upsert(con, "daily_prices", rows)
+    assert quality.find_gaps(con, "daily_prices", days + [date(2026, 10, 29)]) == [date(2026, 10, 27), date(2026, 10, 29)]
+    # A table that starts later is not reported as missing its whole past
+    datastore.upsert(con, "etf_nav", [{"ins_code": "1", "d": date(2026, 10, 28), "nav_redeem": 1.0}])
+    assert quality.find_gaps(con, "etf_nav", days) == []
+    assert quality.find_gaps(con, "client_flows", days) == days
+
+
 def test_compare_closes():
     assert quality.compare_closes(100.0, 100.4)
     assert not quality.compare_closes(100.0, 102.0)

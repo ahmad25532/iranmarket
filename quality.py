@@ -131,6 +131,35 @@ def check_fetch_errors(con: duckdb.DuckDBPyConnection, run_id: str) -> Check:
     return ("fetch_errors", sev, f"{errors}/{total} requests failed. {detail}")
 
 
+def find_gaps(
+    con: duckdb.DuckDBPyConnection, table: str, trading_days: List[date], min_ratio: float = 0.7
+) -> List[date]:
+    """
+    Trading days (from the TEDPIX calendar) on which `table` has far fewer rows than usual.
+    Days before the table's first stored date are ignored, so a table that only starts
+    later (e.g. NAV) is not reported as missing its whole past.
+    """
+    if not trading_days:
+        return []
+    counts = dict(con.execute(
+        f"SELECT d, count(*) FROM {table} WHERE d >= ? AND d <= ? GROUP BY d",
+        [trading_days[0], trading_days[-1]],
+    ).fetchall())
+    first = _scalar(con, f"SELECT min(d) FROM {table}")
+    present = sorted(n for n in counts.values() if n > 0)
+    if first is None or not present:
+        return list(trading_days)
+    median = present[len(present) // 2]
+    return [d for d in trading_days if d >= first and counts.get(d, 0) < min_ratio * median]
+
+
+def check_gaps(name: str, gaps: List[date]) -> Check:
+    if not gaps:
+        return (name, "ok", "no missing trading days in the lookback window")
+    shown = ", ".join(str(d) for d in gaps[:6]) + (" ..." if len(gaps) > 6 else "")
+    return (name, "warn", f"{len(gaps)} trading days still incomplete: {shown}")
+
+
 def compare_closes(snapshot_close: float, official_close: float, tol: float = 0.005) -> bool:
     return official_close > 0 and abs(snapshot_close / official_close - 1) <= tol
 

@@ -61,11 +61,15 @@ class HttpClient:
             urllib.request.ProxyHandler({}), urllib.request.HTTPSHandler(context=SSL_CTX)
         )
 
-    def _get_direct(self, host: str, path: str, timeout: float) -> str:
+    def _get_direct(self, host: str, path: str, timeout: float, body: Optional[Any] = None) -> str:
         kwargs = {"source_address": (self.source_ip, 0)} if self.source_ip else {}
         conn = http.client.HTTPSConnection(host, timeout=timeout, context=SSL_CTX, **kwargs)
         try:
-            conn.request("GET", path, headers=HEADERS)
+            if body is None:
+                conn.request("GET", path, headers=HEADERS)
+            else:
+                headers = {**HEADERS, "Content-Type": "application/json"}
+                conn.request("POST", path, body=json.dumps(body), headers=headers)
             res = conn.getresponse()
             body = res.read().decode("utf-8", errors="replace")
             if res.status != 200:
@@ -79,12 +83,15 @@ class HttpClient:
         with self._opener.open(req, timeout=timeout) as r:
             return r.read().decode("utf-8", errors="replace")
 
-    def get_text(self, host: str, path: str, timeout: float = 15, direct: bool = True) -> str:
+    def get_text(
+        self, host: str, path: str, timeout: float = 15, direct: bool = True, body: Optional[Any] = None
+    ) -> str:
+        """GET (or POST with a JSON body) with retries. POST is only supported on the direct route."""
         last_err: Optional[Exception] = None
         for attempt in range(self.retries):
             try:
-                if direct:
-                    return self._get_direct(host, path, timeout)
+                if direct or body is not None:
+                    return self._get_direct(host, path, timeout, body)
                 return self._get_url(f"https://{host}{path}", timeout)
             except (OSError, FetchError, http.client.HTTPException) as e:
                 last_err = e
@@ -93,8 +100,10 @@ class HttpClient:
                 time.sleep(self.backoff_s * (attempt + 1))
         raise FetchError(f"{host}{path}: {last_err}")
 
-    def get_json(self, host: str, path: str, timeout: float = 15, direct: bool = True) -> Any:
-        text = self.get_text(host, path, timeout=timeout, direct=direct)
+    def get_json(
+        self, host: str, path: str, timeout: float = 15, direct: bool = True, body: Optional[Any] = None
+    ) -> Any:
+        text = self.get_text(host, path, timeout=timeout, direct=direct, body=body)
         try:
             return json.loads(text)
         except json.JSONDecodeError as e:

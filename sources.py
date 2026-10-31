@@ -13,6 +13,7 @@ from net import HttpClient
 
 TSETMC = "cdn.tsetmc.com"
 TGJU = "api.tgju.org"
+FIPIRAN = "www.fipiran.com"
 
 PAPER_STOCKS = 1
 PAPER_BASE_MARKET = 2
@@ -262,6 +263,48 @@ def parse_etf_nav(raw: Dict[str, Any], close: Optional[float]) -> Optional[Dict[
         "nav_issue": _f(raw.get("pSubTran")),
         "nav_time": _i(raw.get("hEven")),
         "close": close,
+        "source": "tsetmc",
+    }
+
+
+# ---------- Fipiran (NAV history; fills days the daily snapshot missed) ----------
+
+def fetch_fipiran_funds(http: HttpClient) -> List[Dict[str, Any]]:
+    """All funds registered with SEO, with regNo and (for exchange-traded ones) insCode."""
+    data = http.get_json(
+        FIPIRAN, "/services/fund/fundcompare/", timeout=60, body={"regNos": [], "showMarketMakers": False}
+    )
+    items = data.get("items")
+    if items is None:
+        raise ValueError("no 'items' key in Fipiran fund list")
+    return items
+
+
+def fetch_fipiran_nav_history(http: HttpClient, reg_no: str, show_all: bool = True) -> List[Dict[str, Any]]:
+    path = f"/services/chart/getfundchart?regno={reg_no}&groupId=0&showAll={'true' if show_all else 'false'}"
+    data = http.get_json(FIPIRAN, path, timeout=60)
+    if not isinstance(data, list):
+        raise ValueError(f"unexpected Fipiran NAV payload for regNo {reg_no}")
+    return data
+
+
+def parse_fipiran_nav(row: Dict[str, Any], ins_code: str) -> Optional[Dict[str, Any]]:
+    """Fipiran end-of-day NAV per unit (rial). cancelNav = redemption NAV, issueNav = subscription NAV."""
+    try:
+        d = datetime.fromisoformat(str(row.get("date"))).date()
+    except ValueError:
+        return None
+    red = _f(row.get("cancelNav")) or 0.0
+    if red <= 0:
+        return None
+    return {
+        "ins_code": ins_code,
+        "d": d,
+        "nav_redeem": red,
+        "nav_issue": _f(row.get("issueNav")),
+        "nav_time": None,
+        "close": None,
+        "source": "fipiran",
     }
 
 
