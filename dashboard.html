@@ -178,12 +178,24 @@ let current = null;
 
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
+// Where a price comes from and how old it is: live quotes show their time, stored ones their closing date.
+function stamp(x) {
+  if (!x) return '';
+  if (!x.live) return 'قیمت پایانی ' + jdate(x.d);
+  const t = new Date(x.as_of);
+  const time = t.toLocaleTimeString('fa-IR', {hour: '2-digit', minute: '2-digit'});
+  const sameDay = t.toDateString() === new Date().toDateString();
+  return 'زنده، ' + (sameDay ? 'امروز ' : jdate(x.d) + ' ') + 'ساعت ' + time;
+}
+
 function renderKpis(m) {
   const items = [];
-  if (m.usd) items.push(['دلار آزاد', fa(toman(m.usd.close)) + ' تومان', jdate(m.usd.d)]);
-  if (m.gold18) items.push(['طلای ۱۸ عیار (گرم)', fa(toman(m.gold18.close) / 1e6, 2) + ' میلیون تومان', jdate(m.gold18.d)]);
-  if (m.ounce) items.push(['انس جهانی', '$' + fa(m.ounce.close, 0), jdate(m.ounce.d)]);
-  if (m.gold18_bubble !== undefined) items.push(['حباب طلای ۱۸ عیار', pct(m.gold18_bubble), 'نسبت به انس × دلار، ' + jdate(m.bubble_date)]);
+  if (m.usd) items.push(['دلار آزاد', fa(toman(m.usd.close)) + ' تومان', stamp(m.usd)]);
+  if (m.gold18) items.push(['طلای ۱۸ عیار (گرم)', fa(toman(m.gold18.close) / 1e6, 2) + ' میلیون تومان', stamp(m.gold18)]);
+  if (m.coin) items.push(['سکه امامی', fa(toman(m.coin.close) / 1e6, 1) + ' میلیون تومان', stamp(m.coin)]);
+  if (m.ounce) items.push(['انس جهانی', '$' + fa(m.ounce.close, 0), stamp(m.ounce)]);
+  if (m.gold18_bubble !== undefined) items.push(['حباب طلای ۱۸ عیار', pct(m.gold18_bubble),
+    'نسبت به انس × دلار، ' + (m.bubble_live ? 'قیمت‌های زنده' : jdate(m.bubble_date))]);
   if (m.tedpix && m.usd) items.push(['شاخص کل ÷ دلار', fa(m.tedpix.close / toman(m.usd.close), 1), 'شاخص ' + fa(m.tedpix.close)]);
   document.getElementById('kpis').innerHTML = items.map(([l, v, n]) =>
     `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`).join('');

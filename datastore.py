@@ -119,6 +119,10 @@ CREATE TABLE IF NOT EXISTS macro_daily (
     close   DOUBLE,
     PRIMARY KEY (series, d)
 );
+-- 'history' = TGJU's closed-day table; 'live' = intraday price (as_of = its timestamp), replaced
+-- by the history row once TGJU publishes the day.
+ALTER TABLE macro_daily ADD COLUMN IF NOT EXISTS source VARCHAR;
+ALTER TABLE macro_daily ADD COLUMN IF NOT EXISTS as_of TIMESTAMP;
 
 -- One row per market date for which an end-of-day snapshot was taken (final = market was closed).
 CREATE TABLE IF NOT EXISTS snapshots (

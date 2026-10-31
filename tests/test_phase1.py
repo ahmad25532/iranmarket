@@ -73,8 +73,37 @@ def test_parse_tgju_row():
            "2026/10/29", "1405/08/07"]
     row = sources.parse_tgju_row(raw, "usd_irr")
     assert row == {"series": "usd_irr", "d": date(2026, 10, 29), "open": 2701950.0,
-                   "low": 2685000.0, "high": 2715100.0, "close": 2710600.0}
+                   "low": 2685000.0, "high": 2715100.0, "close": 2710600.0, "source": "history", "as_of": None}
     assert sources.parse_tgju_row(raw[:5], "usd_irr") is None
+
+
+def test_parse_tgju_live():
+    current = {
+        "geram18": {"p": "252,562,000", "h": "262,256,000", "l": "251,662,000", "ts": "2026-10-31 17:50:50"},
+        "price_dollar_rl": {"p": "2,704,650", "ts": "2026-10-31 17:50:50"},
+        "ons": {"p": "3,875.84", "ts": "2026-10-31 01:50:16"},
+        "sekee": {"p": "", "ts": "2026-10-31 17:50:50"},          # no price: skipped
+    }
+    rows = {r["series"]: r for r in sources.parse_tgju_live(current)}
+    assert set(rows) == {"gold_18k_irr", "usd_irr", "gold_ounce_usd"}
+    assert rows["gold_18k_irr"]["close"] == 252_562_000.0 and rows["gold_18k_irr"]["source"] == "live"
+    assert rows["gold_ounce_usd"]["d"] == date(2026, 10, 31)
+
+
+def test_live_macro_never_overwrites_closed_day(con):
+    import collector
+    from datetime import datetime
+    datastore.upsert(con, "macro_daily", [{"series": "usd_irr", "d": D, "close": 100.0, "source": "history"}])
+    live = [
+        {"series": "usd_irr", "d": D, "close": 999.0, "source": "live", "as_of": datetime(2026, 10, 28, 12)},
+        {"series": "usd_irr", "d": date(2026, 10, 31), "close": 101.0, "source": "live", "as_of": datetime(2026, 10, 31, 12)},
+    ]
+    collector.store_live_macro(con, live)
+    rows = dict(con.execute("SELECT d, close FROM macro_daily ORDER BY d").fetchall())
+    assert rows == {D: 100.0, date(2026, 10, 31): 101.0}
+    # When TGJU later publishes the closed day, it replaces the live row
+    datastore.upsert(con, "macro_daily", [{"series": "usd_irr", "d": date(2026, 10, 31), "close": 102.0, "source": "history"}])
+    assert con.execute("SELECT close, source FROM macro_daily WHERE d = '2026-10-31'").fetchall() == [(102.0, "history")]
 
 
 def test_parse_etf_nav():

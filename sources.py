@@ -361,4 +361,39 @@ def parse_tgju_row(row: List[Any], series: str) -> Optional[Dict[str, Any]]:
         "low": clean_num(row[1]),
         "high": clean_num(row[2]),
         "close": close,
+        "source": "history",
+        "as_of": None,
     }
+
+
+# The daily table above only gets a row once the day has closed, so during the day it lags by
+# a day or more. TGJU's live feed has the current price with its timestamp.
+TGJU_LIVE_HOST = "call3.tgju.org"
+
+
+def fetch_tgju_live(http: HttpClient) -> Dict[str, Any]:
+    data = http.get_json(TGJU_LIVE_HOST, "/ajax.json", timeout=20, direct=False)
+    current = data.get("current")
+    if not isinstance(current, dict):
+        raise ValueError("no 'current' block in TGJU live feed")
+    return current
+
+
+def parse_tgju_live(current: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """One macro_daily row per tracked series, dated by the price's own timestamp (Tehran time)."""
+    out = []
+    for series, slug in TGJU_SERIES.items():
+        item = current.get(slug) or {}
+        price = clean_num(item.get("p"))
+        try:
+            as_of = datetime.strptime(str(item.get("ts", "")).strip(), "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+        if not price:
+            continue
+        out.append({
+            "series": series, "d": as_of.date(), "open": None,
+            "low": clean_num(item.get("l")), "high": clean_num(item.get("h")),
+            "close": price, "source": "live", "as_of": as_of,
+        })
+    return out

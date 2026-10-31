@@ -12,7 +12,10 @@ Run:  .venv\\Scripts\\python.exe dashboard.py   ->  http://127.0.0.1:8085
 
 import json
 import os
+import socket
 import sys
+import threading
+import time
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
@@ -20,6 +23,8 @@ from typing import Any, Dict, List, Optional
 import duckdb
 
 import datastore
+import sources
+from net import FetchError, HttpClient
 
 PORT = 8085
 PORTFOLIO_PATH = os.path.join(datastore.BASE_DIR, "data", "portfolio.json")
@@ -113,21 +118,58 @@ def _latest_macro(con: duckdb.DuckDBPyConnection, series: str) -> Optional[Dict[
     return r[0] if r else None
 
 
-def market_snapshot(con: duckdb.DuckDBPyConnection) -> Dict[str, Any]:
-    usd, g18, ons = (_latest_macro(con, s) for s in ("usd_irr", "gold_18k_irr", "gold_ounce_usd"))
-    out: Dict[str, Any] = {"usd": usd, "gold18": g18, "ounce": ons}
-    # The bubble must compare prices of the same day: the ounce also trades on Iranian weekends.
-    same_day = _rows(con, """
-        SELECT g.d, g.close AS g, o.close AS o, u.close AS u
-        FROM macro_daily g JOIN macro_daily o ON o.d = g.d AND o.series = 'gold_ounce_usd'
-        JOIN macro_daily u ON u.d = g.d AND u.series = 'usd_irr'
-        WHERE g.series = 'gold_18k_irr' ORDER BY g.d DESC LIMIT 1""")
-    if same_day:
-        r = same_day[0]
-        intrinsic = r["o"] * r["u"] / 31.1034768 * 0.75
+LIVE_TTL_SECONDS = 300
+_live_cache: Dict[str, Any] = {"at": 0.0, "rows": None}
+_live_lock = threading.Lock()
+_http: Optional[HttpClient] = None
+
+
+def get_live_prices() -> Optional[List[Dict[str, Any]]]:
+    """TGJU live prices, cached for a few minutes; None when the feed cannot be reached."""
+    global _http
+    with _live_lock:
+        if time.monotonic() - _live_cache["at"] < LIVE_TTL_SECONDS:
+            return _live_cache["rows"]
+        try:
+            if _http is None:
+                _http = HttpClient(retries=1)
+            rows = sources.parse_tgju_live(sources.fetch_tgju_live(_http))
+        except (FetchError, ValueError, OSError):
+            rows = None
+        _live_cache.update(at=time.monotonic(), rows=rows)
+        return rows
+
+
+def market_snapshot(con: duckdb.DuckDBPyConnection, live: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """
+    Latest USD / 18k gold / ounce / coin. Live TGJU prices win when they are newer than the stored
+    closed-day row; every value carries its date (and time when live) so staleness is visible.
+    """
+    names = {"usd_irr": "usd", "gold_18k_irr": "gold18", "gold_ounce_usd": "ounce", "coin_emami_irr": "coin"}
+    out: Dict[str, Any] = {k: _latest_macro(con, s) for s, k in names.items()}
+    for r in live or []:
+        key = names.get(r["series"])
+        stored = out.get(key)
+        if key and (stored is None or r["d"] >= stored["d"]):
+            out[key] = {"d": r["d"], "close": r["close"], "as_of": r["as_of"], "live": True}
+    usd, g18, ons = out["usd"], out["gold18"], out["ounce"]
+    if usd and g18 and ons and usd.get("live") and g18.get("live") and ons.get("live"):
+        # All three are current quotes, so they can be compared directly.
+        bubble_inputs = {"d": g18["d"], "g": g18["close"], "o": ons["close"], "u": usd["close"]}
+        out["bubble_live"] = True
+    else:
+        # Stored rows: compare prices of the same day (the ounce also trades on Iranian weekends).
+        same_day = _rows(con, """
+            SELECT g.d, g.close AS g, o.close AS o, u.close AS u
+            FROM macro_daily g JOIN macro_daily o ON o.d = g.d AND o.series = 'gold_ounce_usd'
+            JOIN macro_daily u ON u.d = g.d AND u.series = 'usd_irr'
+            WHERE g.series = 'gold_18k_irr' ORDER BY g.d DESC LIMIT 1""")
+        bubble_inputs = same_day[0] if same_day else None
+    if bubble_inputs:
+        intrinsic = bubble_inputs["o"] * bubble_inputs["u"] / 31.1034768 * 0.75
         out["gold18_intrinsic"] = intrinsic
-        out["gold18_bubble"] = r["g"] / intrinsic - 1
-        out["bubble_date"] = r["d"]
+        out["gold18_bubble"] = bubble_inputs["g"] / intrinsic - 1
+        out["bubble_date"] = bubble_inputs["d"]
     ted = _rows(con, "SELECT d, close FROM index_daily WHERE index_code = ? ORDER BY d DESC LIMIT 1", [TEDPIX])
     out["tedpix"] = ted[0] if ted else None
     return out
@@ -182,7 +224,7 @@ def value_portfolio(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any], market: 
         items.append({"ticker": r["ticker"], "name": r["name"], "qty": h["qty"], "price": r["close"], "d": r["d"],
                       "value": h["qty"] * r["close"], "cls": classify(r["asset_class"], r["is_gold"])})
     m = pf["manual"]
-    coin = _latest_macro(con, "coin_emami_irr")
+    coin = market.get("coin")
     manual_items = [
         ("طلای ۱۸ عیار (گرم)", m["gold18_grams"], (market.get("gold18") or {}).get("close"), "gold"),
         ("سکه امامی (عدد)", m["coin_emami"], (coin or {}).get("close"), "gold"),
@@ -235,8 +277,9 @@ def context_series(con: duckdb.DuckDBPyConnection) -> Dict[str, Any]:
     return {"tedpix_usd": ted_usd, "gold18_bubble": bubble}
 
 
-def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any]) -> Dict[str, Any]:
-    market = market_snapshot(con)
+def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
+          live: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    market = market_snapshot(con, live)
     return {
         "generated_at": datetime.now(),
         "health": health(con),
@@ -295,7 +338,7 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(datastore.BASE_DIR, "dashboard.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/api/state":
-            return self._with_db(lambda con: self._json(200, state(con, load_portfolio())))
+            return self._with_db(lambda con: self._json(200, state(con, load_portfolio(), get_live_prices())))
         self._send(404, b"not found", "text/plain")
 
     def do_POST(self):
@@ -313,14 +356,31 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._json(400, {"error": str(e)})
             save_portfolio(clean)
-            return self._json(200, state(con, clean))
+            return self._json(200, state(con, clean, get_live_prices()))
         return self._with_db(save)
+
+
+class ExclusiveServer(ThreadingHTTPServer):
+    # http.server enables SO_REUSEADDR, which on Windows lets a second copy bind the same port
+    # silently; requests then land on either copy at random. Bind exclusively instead.
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Iran Market AI dashboard: http://127.0.0.1:{PORT}")
+    port = int(os.environ.get("PORT", PORT))
+    try:
+        server = ExclusiveServer(("127.0.0.1", port), Handler)
+    except OSError:
+        print(f"The dashboard is already running at http://127.0.0.1:{port} - use that window.")
+        print(f"(If you just updated the code, close the other dashboard window first and start again.)")
+        return 0
+    print(f"Iran Market AI dashboard: http://127.0.0.1:{port}  (keep this window open)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

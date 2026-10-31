@@ -58,6 +58,26 @@ def test_bubble_uses_same_day_prices(con):
     assert m["gold18_bubble"] == pytest.approx(50_000_000 / intrinsic - 1)
 
 
+def test_live_prices_override_older_stored_rows(con):
+    from datetime import datetime
+    live = [
+        {"series": "gold_18k_irr", "d": date(2026, 10, 31), "close": 48_000_000.0, "as_of": datetime(2026, 10, 31, 17, 50)},
+        {"series": "usd_irr", "d": date(2026, 10, 31), "close": 1_000_000.0, "as_of": datetime(2026, 10, 31, 17, 50)},
+        {"series": "gold_ounce_usd", "d": date(2026, 10, 31), "close": 2000.0, "as_of": datetime(2026, 10, 31, 1, 50)},
+        {"series": "coin_emami_irr", "d": date(2026, 10, 20), "close": 1.0, "as_of": datetime(2026, 10, 20, 12, 0)},  # older than stored? none stored -> used
+    ]
+    m = dashboard.market_snapshot(con, live)
+    assert m["gold18"]["live"] and m["gold18"]["close"] == 48_000_000.0
+    assert m["bubble_live"]
+    intrinsic = 2000 * 1_000_000 / 31.1034768 * 0.75
+    assert m["gold18_bubble"] == pytest.approx(48_000_000 / intrinsic - 1)
+    # A stale live quote never replaces a newer stored close
+    stale = [{"series": "gold_18k_irr", "d": date(2026, 10, 1), "close": 1.0, "as_of": datetime(2026, 10, 1)}]
+    m2 = dashboard.market_snapshot(con, stale)
+    assert m2["gold18"]["close"] == 50_000_000.0 and "live" not in m2["gold18"]
+    assert not m2.get("bubble_live")
+
+
 def test_portfolio_valuation_and_gaps(con):
     pf = dashboard.validate_portfolio(con, {
         "holdings": [{"ticker": "عیار", "qty": 100}, {"ticker": "فملی", "qty": 10}],   # Persian ی/ک are normalized

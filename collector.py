@@ -238,6 +238,16 @@ def refresh_tgju(run: Run, length: int) -> None:
             n = datastore.upsert(run.con, "macro_daily", [r for r in (sources.parse_tgju_row(x, series) for x in rows) if r])
             if length > 30:
                 print(f"  TGJU {series}: {n} days")
+    current = run.fetch("tgju", "live", lambda: sources.fetch_tgju_live(run.http))
+    if current:
+        store_live_macro(run.con, sources.parse_tgju_live(current))
+
+
+def store_live_macro(con: duckdb.DuckDBPyConnection, rows: List[Dict[str, Any]]) -> int:
+    """Stores live prices for days TGJU has not closed yet; never overwrites a closed-day row."""
+    closed = {(s, d) for s, d in con.execute(
+        "SELECT series, d FROM macro_daily WHERE source IS DISTINCT FROM 'live'").fetchall()}
+    return datastore.upsert(con, "macro_daily", [r for r in rows if (r["series"], r["d"]) not in closed])
 
 
 def _new_instruments(con: duckdb.DuckDBPyConnection) -> List[str]:
