@@ -1,0 +1,146 @@
+"""
+Data-quality checks run after every collection. Each check writes one row to
+quality_checks with severity ok / warn / fail, so bad or stale data is visible
+instead of silently flowing into signals.
+"""
+
+from datetime import date
+from typing import List, Optional, Tuple
+
+import duckdb
+
+from datastore import record_check
+
+Check = Tuple[str, str, str]  # (name, severity, detail)
+
+
+def _scalar(con: duckdb.DuckDBPyConnection, sql: str, params: Optional[list] = None):
+    row = con.execute(sql, params or []).fetchone()
+    return row[0] if row else None
+
+
+def check_snapshot_date(d: date, today: date) -> Check:
+    # Iranian weekend is Thursday/Friday plus holidays; more than 5 calendar days is suspicious.
+    lag = (today - d).days
+    if lag < 0:
+        return ("snapshot_date", "fail", f"market date {d} is in the future")
+    if lag > 5:
+        return ("snapshot_date", "warn", f"last market activity {d} is {lag} days old (holiday or stale feed)")
+    return ("snapshot_date", "ok", f"market date {d}")
+
+
+def check_price_rows(con: duckdb.DuckDBPyConnection, d: date) -> Check:
+    n = _scalar(con, "SELECT count(*) FROM daily_prices WHERE d = ?", [d]) or 0
+    prev = con.execute(
+        """SELECT count(*) AS n FROM daily_prices WHERE d < ? AND d >= ? - INTERVAL 30 DAY
+           GROUP BY d ORDER BY d DESC LIMIT 5""",
+        [d, d],
+    ).fetchall()
+    if n == 0:
+        return ("price_rows", "fail", f"no price rows for {d}")
+    if prev:
+        med = sorted(r[0] for r in prev)[len(prev) // 2]
+        if n < 0.7 * med:
+            return ("price_rows", "warn", f"{n} rows vs recent median {med}")
+        return ("price_rows", "ok", f"{n} rows (recent median {med})")
+    return ("price_rows", "ok", f"{n} rows (no earlier days to compare)")
+
+
+def check_price_sanity(con: duckdb.DuckDBPyConnection, d: date) -> Check:
+    # The closing price (pClosing) only moves once enough volume trades, so on thin days it can
+    # legitimately sit outside the day's range; the last trade price must always be inside it.
+    bad = con.execute(
+        """SELECT i.ticker FROM daily_prices p LEFT JOIN instruments i USING (ins_code)
+           WHERE p.d = ? AND (p.close <= 0 OR p.last <= 0
+                 OR (p.low > 0 AND p.high > 0 AND (p.last < p.low * 0.999 OR p.last > p.high * 1.001))
+                 OR (p.yesterday > 0 AND abs(p.last / p.yesterday - 1) > 0.35))""",
+        [d],
+    ).fetchall()
+    if bad:
+        sample = ", ".join(str(r[0]) for r in bad[:8])
+        return ("price_sanity", "warn", f"{len(bad)} rows with last price outside range or >35% move: {sample}")
+    return ("price_sanity", "ok", "all last prices inside daily range")
+
+
+def check_flow_coverage(con: duckdb.DuckDBPyConnection, d: date) -> Check:
+    n_prices, n_flows = con.execute(
+        """SELECT count(*), count(f.ins_code) FROM daily_prices p
+           LEFT JOIN client_flows f ON f.ins_code = p.ins_code AND f.d = p.d WHERE p.d = ?""",
+        [d],
+    ).fetchone()
+    if not n_prices:
+        return ("flow_coverage", "fail", "no price rows")
+    pct = 100.0 * n_flows / n_prices
+    sev = "ok" if pct >= 90 else "warn"
+    return ("flow_coverage", sev, f"{n_flows}/{n_prices} traded instruments have flow data ({pct:.1f}%)")
+
+
+def check_flow_volume_consistency(con: duckdb.DuckDBPyConnection, d: date) -> Check:
+    """Individual + institutional buy volume must equal the day's traded volume."""
+    total, bad = con.execute(
+        """SELECT count(*),
+                  count(*) FILTER (WHERE abs((f.buy_i_volume + f.buy_n_volume) / p.volume - 1) > 0.01)
+           FROM daily_prices p JOIN client_flows f ON f.ins_code = p.ins_code AND f.d = p.d
+           WHERE p.d = ? AND p.volume > 0""",
+        [d],
+    ).fetchone()
+    if not total:
+        return ("flow_volume_consistency", "warn", "no rows to compare")
+    pct = 100.0 * bad / total
+    sev = "ok" if pct <= 5 else "warn"
+    return ("flow_volume_consistency", sev, f"{bad}/{total} rows where buy volume != traded volume (>1%)")
+
+
+def check_nav(con: duckdb.DuckDBPyConnection, d: date, etf_count: int) -> Check:
+    n, outliers = con.execute(
+        """SELECT count(*), count(*) FILTER (WHERE close > 0 AND abs(close / nav_redeem - 1) > 0.30)
+           FROM etf_nav WHERE d = ?""",
+        [d],
+    ).fetchone()
+    if etf_count and n < 0.8 * etf_count:
+        return ("etf_nav", "warn", f"NAV captured for {n}/{etf_count} ETFs on {d}")
+    if outliers:
+        return ("etf_nav", "warn", f"{outliers} ETFs with price/NAV gap >30% (likely data error)")
+    return ("etf_nav", "ok", f"NAV captured for {n}/{etf_count} ETFs")
+
+
+def check_macro_freshness(con: duckdb.DuckDBPyConnection, today: date, series: List[str]) -> Check:
+    stale = []
+    for s in series:
+        last = _scalar(con, "SELECT max(d) FROM macro_daily WHERE series = ?", [s])
+        if last is None or (today - last).days > 4:
+            stale.append(f"{s}:{last}")
+    if stale:
+        return ("macro_freshness", "warn", "stale TGJU series: " + ", ".join(stale))
+    return ("macro_freshness", "ok", f"{len(series)} TGJU series up to date")
+
+
+def check_fetch_errors(con: duckdb.DuckDBPyConnection, run_id: str) -> Check:
+    total, errors = con.execute(
+        "SELECT count(*), count(*) FILTER (WHERE status = 'error') FROM fetch_log WHERE run_id = ?", [run_id]
+    ).fetchone()
+    if not total:
+        return ("fetch_errors", "fail", "nothing was fetched")
+    if errors == 0:
+        return ("fetch_errors", "ok", f"{total} requests, no errors")
+    sev = "fail" if errors / total > 0.10 else "warn"
+    samples = con.execute(
+        "SELECT target, error FROM fetch_log WHERE run_id = ? AND status = 'error' LIMIT 3", [run_id]
+    ).fetchall()
+    detail = "; ".join(f"{t}: {e[:80]}" for t, e in samples)
+    return ("fetch_errors", sev, f"{errors}/{total} requests failed. {detail}")
+
+
+def compare_closes(snapshot_close: float, official_close: float, tol: float = 0.005) -> bool:
+    return official_close > 0 and abs(snapshot_close / official_close - 1) <= tol
+
+
+def save_and_summarize(con: duckdb.DuckDBPyConnection, run_id: str, d: Optional[date], checks: List[Check]) -> int:
+    """Stores checks and prints a summary. Returns number of failed checks."""
+    icons = {"ok": "OK  ", "warn": "WARN", "fail": "FAIL"}
+    fails = 0
+    for name, sev, detail in checks:
+        record_check(con, run_id, d, name, sev, detail)
+        print(f"  [{icons[sev]}] {name}: {detail}")
+        fails += sev == "fail"
+    return fails

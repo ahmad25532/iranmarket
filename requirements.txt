@@ -1,0 +1,6 @@
+polars==2.1.0
+duckdb==2.0.0
+vectorbt==1.2.0
+pytest==9.2.0
+tsetmc==4.1.1
+aiohutils==0.27.0  # tsetmc 4.1.1 breaks on aiohutils 0.28 (missing aiohutils.pd)

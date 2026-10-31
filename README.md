@@ -41,3 +41,41 @@ python dashboard_server.py
 
 سپس در مرورگر خود آدرس زیر را باز کنید:
 👉 **http://127.0.0.1:8085**
+
+---
+
+## 🗄️ لایه داده (فاز ۱)
+
+داده‌ها در `data/market.duckdb` ذخیره می‌شوند (قیمت خام روزانه، جریان پول حقیقی/حقوقی، NAV صندوق‌ها، شاخص‌ها، دلار/طلا/سکه/انس).
+بعد از هر اجرا، بررسی کیفیت داده انجام و نتیجه در جدول `quality_checks` ثبت می‌شود.
+
+| فایل | کار |
+|---|---|
+| `net.py` | اتصال HTTP با گواهی TLS معتبر و مسیر مستقیم برای سایت‌های داخلی |
+| `sources.py` | دریافت و تبدیل داده‌های TSETMC و TGJU |
+| `datastore.py` | ساختار پایگاه داده DuckDB |
+| `quality.py` | بررسی‌های کیفیت داده |
+| `collector.py` | اجرای روزانه و دریافت تاریخچه |
+
+نصب (یک بار):
+
+```bash
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+دستورها:
+
+```bash
+.venv\Scripts\python.exe collector.py backfill   # تاریخچه کامل (یک بار، حدود ۱۰ تا ۲۰ دقیقه)
+.venv\Scripts\python.exe collector.py daily      # عکس روزانه بعد از بسته شدن بازار
+.venv\Scripts\python.exe collector.py status     # وضعیت داده‌های ذخیره‌شده
+.venv\Scripts\python.exe -m pytest -q tests      # تست‌ها
+```
+
+اجرای خودکار روزانه: [`run_daily_collect.bat`](run_daily_collect.bat) را در Task Scheduler ویندوز برای ساعت ۱۶:۰۰ شنبه تا چهارشنبه تنظیم کنید. گزارش هر روز در `data/logs` ذخیره می‌شود.
+
+محدودیت‌های شناخته‌شده:
+- تاریخچه NAV صندوق‌ها از هیچ منبع عمومی در دسترس نیست و فقط از روز اول اجرا به بعد ثبت می‌شود.
+- فقط نمادهای فعلی بازار دریافت می‌شوند و نمادهای حذف‌شده نیستند (سوگیری بقا در بک‌تست).
+- در عکس روزانه، ارزش ریالی جریان حقیقی/حقوقی خالی است و با اجرای دوباره `backfill --refresh` تکمیل می‌شود.

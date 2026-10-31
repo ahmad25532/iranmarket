@@ -3,3 +3,5 @@ __pycache__/
 .env
 my_portfolio.json
 latest_scan.json
+.venv/
+data/
