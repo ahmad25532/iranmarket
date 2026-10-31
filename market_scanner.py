@@ -256,10 +256,67 @@ def fetch_tgju_macro() -> Dict[str, Any]:
     return result
 
 
+def compute_ema(values: List[float], period: int) -> List[float]:
+    if not values:
+        return []
+    k = 2.0 / (period + 1.0)
+    ema = [values[0]]
+    for v in values[1:]:
+        ema.append(v * k + ema[-1] * (1.0 - k))
+    return ema
+
+
+def compute_macd_and_bollinger(closes: List[float]) -> Dict[str, Any]:
+    """Computes standard MACD(12, 26, 9) and Bollinger Bands(20, 2) on adjusted closes."""
+    out: Dict[str, Any] = {
+        "macd_hist": None,
+        "macd_state": "-",
+        "bb_pos_pct": None,
+        "bb_state": "-",
+    }
+    if len(closes) >= 26:
+        ema12 = compute_ema(closes, 12)
+        ema26 = compute_ema(closes, 26)
+        macd_line = [e12 - e26 for e12, e26 in zip(ema12, ema26)]
+        signal_line = compute_ema(macd_line, 9)
+        hist = macd_line[-1] - signal_line[-1]
+        prev_hist = (macd_line[-2] - signal_line[-2]) if len(macd_line) >= 2 else hist
+        out["macd_hist"] = round(hist, 2)
+        if hist > 0 and prev_hist <= 0:
+            out["macd_state"] = "🟢 تقاطع صعودی طلایی (سیگنال خرید MACD)"
+        elif hist > 0 and hist >= prev_hist:
+            out["macd_state"] = "📈 فاز صعودی پرقدرت (MACD > 0)"
+        elif hist > 0 and hist < prev_hist:
+            out["macd_state"] = "🟡 مثبت اما در حال کاهش شتاب"
+        elif hist < 0 and prev_hist >= 0:
+            out["macd_state"] = "🔴 تقاطع نزولی (سیگنال خروج MACD)"
+        else:
+            out["macd_state"] = "🔻 فاز نزولی (MACD < 0)"
+
+    if len(closes) >= 20:
+        w20 = closes[-20:]
+        mean20 = sum(w20) / 20.0
+        variance = sum((x - mean20) ** 2 for x in w20) / 20.0
+        std20 = variance ** 0.5
+        upper = mean20 + 2.0 * std20
+        lower = mean20 - 2.0 * std20
+        cur = closes[-1]
+        if upper > lower:
+            pos = ((cur - lower) / (upper - lower)) * 100.0
+            out["bb_pos_pct"] = round(pos, 1)
+            if pos <= 15:
+                out["bb_state"] = "🟢 کف باند بولینگر (حمایت قوی)"
+            elif pos >= 90:
+                out["bb_state"] = "⚠️ سقف باند بولینگر (احتمال عرضه)"
+            else:
+                out["bb_state"] = f"در {round(pos)}% کانال بولینگر"
+    return out
+
+
 def compute_technicals(history: List[Dict[str, Any]], current_price: float) -> Dict[str, Any]:
-    """Computes Wilder's 14-day RSI (on adjusted closes), SMA-20 distance, and technical signal."""
+    """Computes Wilder's 14-day RSI, MACD(12,26,9), Bollinger Bands(20,2) & SMA-20 on adjusted closes."""
     if not history or len(history) < 15:
-        return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص"}
+        return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص", "macd_state": "-", "bb_state": "-"}
 
     closes = adjust_historical_closes(history)
     if current_price > 0:
@@ -267,20 +324,23 @@ def compute_technicals(history: List[Dict[str, Any]], current_price: float) -> D
             closes.append(current_price)
 
     if len(closes) < 15:
-        return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص"}
+        return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص", "macd_state": "-", "bb_state": "-"}
 
     rsi = compute_wilder_rsi(closes, 14)
     if rsi is None:
-        return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص"}
+        return {"rsi_14": None, "sma_20_diff_pct": None, "tech_signal": "نامشخص", "macd_state": "-", "bb_state": "-"}
 
     sma20_window = closes[-20:] if len(closes) >= 20 else closes
     sma20 = sum(sma20_window) / len(sma20_window)
     sma20_diff_pct = ((closes[-1] - sma20) / sma20 * 100.0) if sma20 > 0 else 0.0
 
+    mb = compute_macd_and_bollinger(closes)
+    macd_hist = mb.get("macd_hist") or 0
+
     if rsi < 33:
         signal = "🟢 کف تکنیکالی (اشباع فروش)"
-    elif 33 <= rsi <= 60 and sma20_diff_pct >= 0:
-        signal = "🚀 روند صعودی سالم (مناسب ورود)"
+    elif 33 <= rsi <= 62 and sma20_diff_pct >= 0 and macd_hist >= 0:
+        signal = "🚀 روند صعودی سالم (تأیید RSI + MACD)"
     elif 60 < rsi <= 70:
         signal = "📈 مومنتوم قوی (نزدیک مقاومت)"
     elif rsi > 70:
@@ -293,6 +353,7 @@ def compute_technicals(history: List[Dict[str, Any]], current_price: float) -> D
         "sma_20": round(sma20),
         "sma_20_diff_pct": round(sma20_diff_pct, 1),
         "tech_signal": signal,
+        **mb,
     }
 
 
