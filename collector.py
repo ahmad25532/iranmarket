@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import duckdb
 
+import adjust
 import datastore
 import quality
 import sources
@@ -322,6 +323,10 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
     gap_days = (today - last_macro).days if last_macro else 20000
     refresh_tgju(run, max(30, gap_days + 10))
 
+    # 5) Rebuild dividend/capital-increase adjusted prices and queue flags from the raw tables
+    adj = adjust.build(con)
+    print(f"  adjusted prices rebuilt: {adj['rows']:,} rows, {adj['events']:,} corporate actions")
+
     # Remaining gaps, ignoring days already re-filled from official history (thin by nature).
     filled = {(r[0], r[1]) for r in con.execute("SELECT d, kind FROM filled_days").fetchall()}
 
@@ -401,6 +406,8 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
     print(f"  index history: {len(names)} indices, {refresh_indices(run, list(names))} rows")
 
     refresh_tgju(run, 20000)
+    adj = adjust.build(con)
+    print(f"  adjusted prices rebuilt: {adj['rows']:,} rows, {adj['events']:,} corporate actions")
 
     print("Quality checks:")
     checks = [
