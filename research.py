@@ -9,7 +9,8 @@ Every signal here is tested the same way:
    cannot be filled on days when most of the market is locked in sell queues.
 
 Asset proxies (investable today through funds):
-- STOCKS: TEDPIX (price index, so it understates stock returns by the dividend yield)
+- STOCKS: TEDPIX (total return: it grows 9-14 points a year faster than the price index in most
+  years, so dividends are included; it is not itself buyable, and pays no fund costs here)
 - GOLD:   18k gold, TGJU free-market price
 - FIXED:  composite NAV of fixed-income ETFs (median daily return across funds)
 """
@@ -88,16 +89,24 @@ def fixed_income_index(con: duckdb.DuckDBPyConnection, days: List[date]) -> np.n
     return out
 
 
-def load_panel(con: duckdb.DuckDBPyConnection, start: date = date(2013, 7, 22), end: date = date(2100, 1, 1)) -> Panel:
+def load_panel(con: duckdb.DuckDBPyConnection, start: date = date(2013, 7, 22), end: date = date(2100, 1, 1),
+               closing_queues: bool = False) -> Panel:
+    """
+    closing_queues also counts a stock that traded away from its limit but closed on the day's extreme
+    at least 1.5% from the reference price. A whole-day lock misses a queue that formed a moment after
+    the open and this counts some days that were not queues, so the two bracket the real figure.
+    """
     days = [r[0] for r in con.execute(
         "SELECT d FROM index_daily WHERE index_code = ? AND d BETWEEN ? AND ? ORDER BY d", [TEDPIX, start, end]
     ).fetchall()]
+    sell_extra = "OR (r.last = r.low AND r.last < r.yesterday * 0.985)" if closing_queues else ""
+    buy_extra = "OR (r.last = r.high AND r.last > r.yesterday * 1.015)" if closing_queues else ""
     stress = dict(
         (r[0], r[1:]) for r in con.execute(
-            """SELECT p.d,
-                      avg(CASE WHEN p.sell_locked THEN 1.0 ELSE 0.0 END),
-                      avg(CASE WHEN p.buy_locked THEN 1.0 ELSE 0.0 END)
-               FROM price_adj p JOIN instrument_class c USING (ins_code)
+            f"""SELECT p.d,
+                      avg(CASE WHEN p.sell_locked {sell_extra} THEN 1.0 ELSE 0.0 END),
+                      avg(CASE WHEN p.buy_locked {buy_extra} THEN 1.0 ELSE 0.0 END)
+               FROM price_adj p JOIN daily_prices r USING (ins_code, d) JOIN instrument_class c USING (ins_code)
                WHERE c.asset_class = 'stock' AND p.trades > 0 GROUP BY p.d"""
         ).fetchall()
     )
@@ -468,6 +477,8 @@ def report(con: duckdb.DuckDBPyConnection) -> None:
     print("\n=== Where the exit signal's edge goes (money flow 60d -> gold, test period, CAGR in USD) ===")
     for label, cagr in cost_decomposition(full.slice(*OUT_OF_SAMPLE), EXIT_SIGNALS["money flow 60d"]):
         print(f"  {label:<40}{cagr:>8.1%}")
+    strict = load_panel(con, closing_queues=True).slice(*OUT_OF_SAMPLE)
+    print(f"  {'same, counting closing queues as locks':<40}{cost_decomposition(strict, EXIT_SIGNALS['money flow 60d'])[-1][1]:>8.1%}")
 
     print("\n=== Past crises: TEDPIX change in USD, share of the window out of stocks, first exit ===")
     for name in ("trend 200d", "trend in USD 200d", "money flow 60d"):

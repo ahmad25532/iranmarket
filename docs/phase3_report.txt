@@ -122,6 +122,7 @@
   + fees                                      3.2%
   + slippage 0.3%                             1.0%
   + market-wide queue locks (realistic)      -5.1%
+  same, counting closing queues as locks     -5.1%
 
 === Past crises: TEDPIX change in USD, share of the window out of stocks, first exit ===
   trend 200d:

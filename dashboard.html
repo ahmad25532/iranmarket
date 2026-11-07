@@ -96,6 +96,12 @@ ul.plain li { padding: 3px 0; }
       <div id="alloc"></div>
       <div class="legend"><span><i style="background:var(--accent)"></i>الان</span><span><i style="background:var(--faint)"></i>هدف شما</span></div>
       <div id="total" class="sub"></div>
+      <div id="band" class="sub" style="margin-top:6px"></div>
+      <div class="form-grid" style="margin-top:12px">
+        <div><label for="route-amount">پول جدید یا برداشت (تومان؛ برداشت با علامت منفی)</label><input id="route-amount" inputmode="decimal" dir="ltr"></div>
+      </div>
+      <button type="button" id="route">تقسیم بین دسته‌ها</button>
+      <div id="route-out" class="sub" role="status" style="margin-top:6px"></div>
     </div>
 
     <div class="card">
@@ -231,7 +237,8 @@ ul.plain li { padding: 3px 0; }
         <li><span class="badge fail">رد شد</span> زمان‌بندی خرید طلا با حباب ۱۸ عیار یا حباب صندوق</li>
         <li><span class="badge fail">تأیید نشد</span> زمان‌بندی انس با روند، بازده واقعی، دلار، COT، نوسان و ارزش منصفانه</li>
         <li><span class="badge fail">تأیید نشد</span> زمان‌بندی دلار آزاد با نرخ واقعی، فاصله با نیما، شتاب تورم، روند و مومنتوم</li>
-        <li><span class="badge info">آزمون نشده</span> سیگنال‌های خبری و انتخاب سهم</li>
+        <li><span class="badge fail">تأیید نشد</span> انتخاب سهم با قیمت و جریان پول، و جابه‌جایی بین صندوق‌های طلا با حباب</li>
+        <li><span class="badge info">آزمون نشده</span> سیگنال‌های خبری و عامل‌های بنیادی</li>
       </ul>
       <div class="sub" style="margin-top:8px">دلیل اصلی رد شدن سیگنال‌های خروج: در بحران‌ها بازار در صف فروش است و نمی‌شود خارج شد. جزئیات: <span class="ltr">docs/phase3_findings.md</span></div>
     </div>
@@ -305,7 +312,26 @@ function renderAlloc(v) {
       <div class="gap">${gap}</div></div>`;
   }).join('');
   document.getElementById('total').textContent = 'ارزش کل: ' + bigToman(v.total) + (v.total_usd ? ' (حدود ' + fa(v.total_usd) + ' دلار)' : '');
+  document.getElementById('band').textContent = `بزرگ‌ترین فاصله با هدف ${fa(v.max_gap_pct, 0)} واحد است؛ ` + (v.max_gap_pct < v.band_pct
+    ? `زیر باند ${fa(v.band_pct, 0)} واحدی. در آزمون سبد ۵۰/۵۰، جابه‌جایی‌های نزدیک‌تر از این باند مزیتی نداشتند.`
+    : `بیرون از باند ${fa(v.band_pct, 0)} واحدی. متعادل‌سازی در این نقطه با قاعده آزمون‌شده هم‌خوان است (شواهد ضعیف است).`);
 }
+
+document.getElementById('route').onclick = async () => {
+  const out = document.getElementById('route-out');
+  const toman = Number(document.getElementById('route-amount').value.replace(/,/g, ''));
+  if (!toman) { out.textContent = 'مبلغ را به عدد وارد کنید.'; return; }
+  try {
+    const r = await fetch('/api/route', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({toman})});
+    const s = await r.json();
+    if (!r.ok) throw new Error(s.error || 'خطا');
+    out.textContent = s.parts.length
+      ? s.parts.map(p => `${p.label}: ${p.amount < 0 ? 'برداشت ' : ''}${bigToman(Math.abs(p.amount))}`).join('، ')
+      : 'تقسیمی ممکن نیست: سبد خالی است، یا برداشت از کل سبد بیشتر است.';
+  } catch (e) {
+    out.textContent = e.message;
+  }
+};
 
 function holdingRow(t = '', q = '') {
   const div = document.createElement('div');
@@ -547,7 +573,9 @@ async function load() {
     const r = await fetch('/api/state');
     const s = await r.json();
     if (!r.ok) throw new Error(s.error || 'خطا');
-    document.getElementById('banner').style.display = 'none';
+    const banner = document.getElementById('banner');
+    banner.textContent = s.stale ? 'داده‌ها در حال به‌روزرسانی هستند؛ این صفحه آخرین نسخه قبلی را نشان می‌دهد و ذخیره سبد فعلاً ممکن نیست.' : '';
+    banner.style.display = s.stale ? 'block' : 'none';
     render(s);
     renderForm(s.portfolio);
   } catch (e) {

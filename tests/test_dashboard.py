@@ -41,6 +41,31 @@ def con():
     c.close()
 
 
+def _alloc(**pairs):
+    return [{"key": k, "label": k, "value": v, "target_pct": t} for k, (v, t) in pairs.items()]
+
+
+def test_new_money_goes_only_to_underweight_classes_and_sums_to_the_amount():
+    parts = dashboard.route_cash(_alloc(stocks=(30.0, 50), gold=(70.0, 50)), 100.0, 10.0)
+    assert parts == [{"key": "stocks", "label": "stocks", "amount": 10.0}]
+
+
+def test_large_new_money_reaches_the_targets_exactly():
+    parts = {p["key"]: p["amount"] for p in dashboard.route_cash(_alloc(stocks=(30.0, 50), gold=(70.0, 50)), 100.0, 100.0)}
+    assert parts == {"stocks": pytest.approx(70.0), "gold": pytest.approx(30.0)}
+
+
+def test_withdrawal_comes_from_overweight_classes():
+    parts = dashboard.route_cash(_alloc(stocks=(30.0, 50), gold=(70.0, 50)), 100.0, -10.0)
+    assert parts == [{"key": "gold", "label": "gold", "amount": -10.0}]
+
+
+def test_route_refuses_an_impossible_withdrawal_and_an_empty_amount():
+    a = _alloc(stocks=(30.0, 50), gold=(70.0, 50))
+    assert dashboard.route_cash(a, 100.0, -200.0) == []
+    assert dashboard.route_cash(a, 100.0, 0.0) == []
+
+
 def test_bubble_uses_same_day_prices(con):
     m = dashboard.market_snapshot(con)
     assert m["bubble_date"] == D                                  # not the weekend ounce

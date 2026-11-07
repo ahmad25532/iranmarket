@@ -34,6 +34,9 @@ from net import FetchError, HttpClient
 PORT = 8085
 PORTFOLIO_PATH = os.path.join(datastore.BASE_DIR, "data", "portfolio.json")
 TEDPIX = "32097828799138957"
+# On 50/50 stocks and gold, a 20-point band beat calendar and narrower bands, and matched never
+# trading on the test period (docs/external_review.md). The evidence is weak but points to trading rarely.
+REBALANCE_BAND_POINTS = 20.0
 
 CLASS_LABELS = {
     "stocks": "سهام و صندوق سهامی",
@@ -221,7 +224,26 @@ def value_portfolio(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any], market: 
         alloc.append({"key": k, "label": label, "value": by_class[k], "current_pct": cur, "target_pct": tgt,
                       "gap_pct": cur - tgt, "gap_value": by_class[k] - tgt / 100 * total})
     return {"items": items, "total": total, "allocation": alloc,
+            "max_gap_pct": max((abs(a["gap_pct"]) for a in alloc), default=0.0), "band_pct": REBALANCE_BAND_POINTS,
             "total_usd": total / market["usd"]["close"] if total and market.get("usd") else None}
+
+
+def route_cash(allocation: List[Dict[str, Any]], total: float, amount: float) -> List[Dict[str, Any]]:
+    """
+    Splits new money (amount > 0) or a withdrawal (amount < 0) across classes so the portfolio moves
+    towards its targets with no selling beyond the withdrawal: only classes on the wanted side of
+    their target take part, in proportion to how far they are from it. Values are in rial.
+    """
+    if not amount or total + amount < 0:
+        return []
+    needs = {a["key"]: a["target_pct"] / 100 * (total + amount) - a["value"] for a in allocation}
+    side = {k: v for k, v in needs.items() if v * amount > 0}
+    size = sum(abs(v) for v in side.values())
+    if not size:
+        return []
+    labels = {a["key"]: a["label"] for a in allocation}
+    # All needs sum to the amount, so the wanted side alone is at least as large; scaling it fits the amount.
+    return [{"key": k, "label": labels[k], "amount": amount * abs(v) / size} for k, v in side.items()]
 
 
 def health(con: duckdb.DuckDBPyConnection) -> Dict[str, Any]:
@@ -280,6 +302,9 @@ def _connect(db_path: str) -> duckdb.DuckDBPyConnection:
     return duckdb.connect(db_path, read_only=True)
 
 
+_last_state: Optional[Dict[str, Any]] = None   # served, marked stale, while the collector locks the database
+
+
 class Handler(BaseHTTPRequestHandler):
     db_path = datastore.DEFAULT_DB_PATH
 
@@ -298,16 +323,28 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(data, ensure_ascii=False, default=_json_default).encode("utf-8"),
                    "application/json; charset=utf-8")
 
-    def _with_db(self, fn):
+    def _with_db(self, fn, on_locked=None):
         try:
             con = _connect(self.db_path)
         except duckdb.Error:
             # The collector holds a write lock for the few minutes it runs.
+            if on_locked:
+                return on_locked()
             return self._json(503, {"error": "داده‌ها در حال به‌روزرسانی هستند؛ چند دقیقه دیگر صفحه را تازه کنید."})
         try:
             return fn(con)
         finally:
             con.close()
+
+    def _fresh_state(self, con):
+        global _last_state
+        _last_state = state(con, load_portfolio(), get_live_prices())
+        return self._json(200, _last_state)
+
+    def _stale_state(self):
+        if _last_state is None:
+            return self._json(503, {"error": "داده‌ها در حال به‌روزرسانی هستند؛ چند دقیقه دیگر صفحه را تازه کنید."})
+        return self._json(200, {**_last_state, "stale": True})
 
     def do_GET(self):
         path = self.path.split("?")[0]
@@ -315,17 +352,28 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(datastore.BASE_DIR, "dashboard.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/api/state":
-            return self._with_db(lambda con: self._json(200, state(con, load_portfolio(), get_live_prices())))
+            return self._with_db(self._fresh_state, on_locked=self._stale_state)
         self._send(404, b"not found", "text/plain")
 
     def do_POST(self):
-        if self.path != "/api/portfolio":
+        if self.path not in ("/api/portfolio", "/api/route"):
             return self._send(404, b"not found", "text/plain")
         try:
             length = int(self.headers.get("Content-Length", 0))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         except (ValueError, UnicodeDecodeError):
             return self._json(400, {"error": "درخواست نامعتبر"})
+
+        if self.path == "/api/route":
+            try:
+                rial = float(payload.get("toman", 0)) * 10
+            except (TypeError, ValueError):
+                return self._json(400, {"error": "مبلغ باید عدد باشد"})
+
+            def route(con):
+                v = value_portfolio(con, load_portfolio(), market_snapshot(con, get_live_prices()))
+                return self._json(200, {"parts": route_cash(v["allocation"], v["total"], rial)})
+            return self._with_db(route)
 
         def save(con):
             try:

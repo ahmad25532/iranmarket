@@ -1,0 +1,43 @@
+=== Gold fund switching, net of 0.44% per switch, against the starting funds held at no cost ===
+design 2024-01-13 .. 2025-05-27, usable funds 3 to 11
+  threshold  lag  switches  excess/y      t    win  before costs
+       0.5%    1        14     -5.1%   -0.7    25%          2.3%
+       0.5%    2        14     -2.6%   -0.3    31%          4.9%
+       1.0%    1        10      0.5%   -0.0    38%          5.9%
+       1.0%    2        10      2.0%    0.1    38%          7.5%
+       2.0%    1         7      1.2%    0.1    31%          5.0%
+       2.0%    2         7      0.2%   -0.0    31%          4.0%
+       3.0%    1         5      0.9%    0.1    31%          3.6%
+       3.0%    2         5     -1.0%   -0.1    31%          1.7%
+  passed design at lag 1: none
+test 2025-05-28 .. 2026-10-28, usable funds 11 to 13
+  threshold  lag  switches  excess/y      t    win  before costs
+       0.5%    1        42     -1.3%   -0.5    44%         35.3%
+       0.5%    2        39    -12.9%   -2.4    38%         19.4%
+       1.0%    1        18      3.8%    0.2    50%         19.2%
+       1.0%    2        18     -3.5%   -1.0    44%         11.4%
+       2.0%    1         4      9.1%    1.3    62%         12.5%
+       2.0%    2         4      6.7%    1.1    62%         10.1%
+       3.0%    1         2     11.7%    1.8    69%         13.4%
+       3.0%    2         2      6.8%    1.4    69%          8.5%
+  shown for context only: nothing passed the design period
+
+=== 50/50 stocks and gold: when to rebalance ===
+design 2014-04-05 .. 2020-12-30
+  rule                      CAGR     USD   DD USD  Sharpe  trades    fees
+  never                    49.3%    8.8%   -42.2%    0.42       2   0.12%
+  every 60 days            51.5%   10.4%   -42.0%    0.47      30   1.42%
+  every 240 days           51.3%   10.3%   -41.8%    0.47      12   0.60%
+  band 5 points            51.9%   10.7%   -41.9%    0.48      36   1.75%
+  band 10 points           52.5%   11.2%   -41.2%    0.50      20   2.05%
+  band 15 points           51.4%   10.4%   -41.5%    0.47       8   0.84%
+  band 20 points           54.5%   12.6%   -40.1%    0.54       8   1.79%
+test 2021-01-02 .. 2026-11-04
+  rule                      CAGR     USD   DD USD  Sharpe  trades    fees
+  never                    56.8%    4.9%   -33.0%    0.33       2   0.12%
+  every 60 days            53.3%    2.5%   -34.4%    0.22      28   0.83%
+  every 240 days           54.0%    3.0%   -34.0%    0.25       8   0.51%
+  band 5 points            53.7%    2.8%   -34.2%    0.24      28   0.86%
+  band 10 points           55.7%    4.1%   -33.5%    0.29      14   0.78%
+  band 15 points           55.7%    4.2%   -32.3%    0.29       8   0.59%
+  band 20 points           56.8%    4.9%   -33.0%    0.33       6   0.65%

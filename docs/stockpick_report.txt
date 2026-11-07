@@ -1,7 +1,7 @@
 DESIGN 2014-04-05 .. 2020-12-30, top 20 of up to 150, net of costs vs the equal-weight universe
   benchmark                             CAGR     USD  DD USD
   equal-weight universe (no cost)      59.6%   16.4%    -65%
-  TEDPIX (price index)                 53.3%   11.7%    -64%
+  TEDPIX (with dividends)              53.3%   11.7%    -64%
   18k gold                             44.3%    5.2%    -35%
   50% universe / 50% gold, static      53.1%   11.6%    -44%
   random 20 stocks, hold 20: CAGR median 30.9%, 5-95% range 23.0% to 38.4% (30 runs)
@@ -34,7 +34,7 @@ Trials: 20; a Bonferroni bar at 5% would be about t >= 3.0.
 TEST 2021-01-02 .. 2026-11-04
   benchmark                             CAGR     USD  DD USD
   equal-weight universe (no cost)      21.8%  -18.5%    -82%
-  TEDPIX (price index)                 35.3%   -9.5%    -67%
+  TEDPIX (with dividends)              35.3%   -9.5%    -67%
   18k gold                             70.5%   14.0%    -26%
   50% universe / 50% gold, static      54.8%    3.6%    -33%
   random 20 stocks, hold 20: CAGR median -4.1%, 5-95% range -8.0% to 1.9% (30 runs)

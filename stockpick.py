@@ -418,7 +418,7 @@ def benchmark_row(s: Stocks, period: Tuple[date, date]) -> Dict[str, Tuple[float
     days, usd = m.days[a:b], m.usd[a:b]
     curves = {
         "equal-weight universe (no cost)": universe_curve(s, a, b, HORIZONS[0]),
-        "TEDPIX (price index)": m.tedpix[a:b],
+        "TEDPIX (with dividends)": m.tedpix[a:b],
         "18k gold": m.gold18[a:b],
     }
     curves["50% universe / 50% gold, static"] = 0.5 * curves["equal-weight universe (no cost)"] + 0.5 * curves["18k gold"] / curves["18k gold"][0]
