@@ -153,3 +153,16 @@ python -m venv .venv
 ```
 
 نتایج و جمع‌بندی: [`docs/free_usd_findings.md`](docs/free_usd_findings.md)
+
+---
+
+## 🎯 انتخاب سهم
+
+`stockpick.py` ده عامل قیمتی و جریان پول را روی ۱۵۰ سهم نقدشونده، با کارمزد، لغزش قیمت و صف، در دو دوره جدا آزمون می‌کند. فهرست سهم فقط برای قاعده‌ای چاپ می‌شود که در دوره آزمون تأیید شده باشد؛ فعلاً هیچ قاعده‌ای تأیید نشده است.
+
+```bash
+.venv\Scripts\python.exe stockpick.py          # آزمون کامل (حدود ۲ دقیقه)
+.venv\Scripts\python.exe stockpick.py today    # آزمون، و فهرست امروز اگر قاعده‌ای تأیید شده باشد
+```
+
+نتایج و جمع‌بندی: [`docs/stock_selection_findings.md`](docs/stock_selection_findings.md)

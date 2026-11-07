@@ -35,6 +35,21 @@ def make_db(bars, ins_code=CODE, paper_type=1):
     return con
 
 
+@pytest.mark.parametrize("isin,expected", [
+    ("IRO1FOLD0001", "stock"),          # Bourse
+    ("IRO3ATAP0001", "stock"),          # Fara Bourse
+    ("IRO7LZIN0001", "stock"),          # base market
+    ("IRT1AHRM0001", "etf_equity"),     # equity fund
+    ("IRO9SHPN1234", "etf_equity"),     # options keep today's catch-all, never "stock"
+])
+def test_shares_are_recognised_by_isin_when_paper_type_is_wrong(isin, expected):
+    con = datastore.connect(":memory:")
+    # The market watch ignores its type filter, so every live instrument ends up with type 8.
+    datastore.upsert(con, "instruments", [{"ins_code": "x", "ticker": "x", "isin": isin, "paper_type": 8}])
+    adjust.build(con)
+    assert con.execute("SELECT asset_class FROM instrument_class WHERE ins_code = 'x'").fetchone()[0] == expected
+
+
 def chain(closes, **extra):
     """Bars where yesterday = previous close (no corporate actions)."""
     out, prev = [], None

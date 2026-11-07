@@ -59,11 +59,15 @@ SELECT
 FROM c
 """
 
+# TSETMC's market watch ignores its paperTypes filter and returns the same list for every type, so
+# the type fetched last (8) overwrites paper_type on every live instrument. Shares are recognised by
+# ISIN instead: IRO1 (Bourse), IRO3 (Fara Bourse), IRO7 (base market). Options and futures use other
+# IRO prefixes. paper_type 1 or 2 only survives on rows that left the live list, all of them shares.
 CLASS_SQL = """
 CREATE OR REPLACE TABLE instrument_class AS
 SELECT i.ins_code, i.ticker, i.name,
     CASE
-        WHEN i.paper_type IN (1, 2) THEN 'stock'
+        WHEN i.paper_type IN (1, 2) OR i.isin LIKE 'IRO1%' OR i.isin LIKE 'IRO3%' OR i.isin LIKE 'IRO7%' THEN 'stock'
         WHEN f.fund_type = 4 THEN 'etf_fixed_income'
         WHEN f.fund_type = 5 THEN 'etf_commodity'
         ELSE 'etf_equity'
