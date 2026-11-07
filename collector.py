@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import duckdb
 
 import adjust
+import dashboard
 import datastore
 import quality
 import sources
@@ -336,6 +337,9 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
     # 5) Rebuild dividend/capital-increase adjusted prices and queue flags from the raw tables
     adj = adjust.build(con)
     print(f"  adjusted prices rebuilt: {adj['rows']:,} rows, {adj['events']:,} corporate actions")
+
+    # 6) Today's portfolio value, so the history grows even when the dashboard is not opened
+    checks.append(dashboard.portfolio_record_check(con))
 
     # Remaining gaps, ignoring days already re-filled from official history (thin by nature).
     filled = {(r[0], r[1]) for r in con.execute("SELECT d, kind FROM filled_days").fetchall()}

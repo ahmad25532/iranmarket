@@ -6,6 +6,7 @@ Shows only what passed the Phase 3 out-of-sample tests, plus context and data he
 - gold funds side by side (NAV returns, premium vs each fund's own normal, liquidity, data warnings)
 - free-market USD, 18k gold, its bubble vs intrinsic value, TEDPIX in dollars (context only)
 - whether today's data is complete and final
+- your time-weighted return against simple holdings (tracking.py)
 
 Run:  .venv\\Scripts\\python.exe dashboard.py   ->  http://127.0.0.1:8085
 """
@@ -18,13 +19,14 @@ import threading
 import time
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import duckdb
 
 import datastore
 import goldfunds
 import sources
+import tracking
 from net import FetchError, HttpClient
 
 PORT = 8085
@@ -51,9 +53,9 @@ def normalize_ticker(t: str) -> str:
 
 # ---------------------------------------------------------------- portfolio file
 
-def load_portfolio(path: str = PORTFOLIO_PATH) -> Dict[str, Any]:
+def load_portfolio(path: Optional[str] = None) -> Dict[str, Any]:
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path or PORTFOLIO_PATH, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return json.loads(json.dumps(DEFAULT_PORTFOLIO))
@@ -95,7 +97,8 @@ def validate_portfolio(con: duckdb.DuckDBPyConnection, data: Dict[str, Any]) -> 
     return {"holdings": holdings, "manual": manual, "target": target}
 
 
-def save_portfolio(data: Dict[str, Any], path: str = PORTFOLIO_PATH) -> None:
+def save_portfolio(data: Dict[str, Any], path: Optional[str] = None) -> None:
+    path = path or PORTFOLIO_PATH
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -205,6 +208,8 @@ def value_portfolio(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any], market: 
     for label, qty, price, cls in manual_items:
         if qty and price:
             items.append({"ticker": label, "qty": qty, "price": price, "value": qty * price, "cls": cls, "manual": True})
+        elif qty:
+            items.append({"ticker": label, "qty": qty, "error": "قیمت پیدا نشد"})
     total = sum(i.get("value", 0) for i in items)
     by_class = {k: 0.0 for k in CLASS_LABELS}
     for i in items:
@@ -248,8 +253,51 @@ def context_series(con: duckdb.DuckDBPyConnection) -> Dict[str, Any]:
     return {"tedpix_usd": ted_usd, "gold18_bubble": bubble}
 
 
+def record_today(con: duckdb.DuckDBPyConnection, source: str, overwrite: bool = True,
+                 today: Optional[date] = None) -> str:
+    """
+    Records today's value from stored closing prices (never live quotes, so a day means the same
+    whoever records it). Returns recorded | exists | no_portfolio | empty | incomplete | failed.
+
+    A wrong record would read as a real gain or loss, so a portfolio file that cannot be read or a
+    holding without a price means no record at all; the next record simply covers the gap.
+    """
+    today = today or date.today()
+    try:
+        with open(PORTFOLIO_PATH, encoding="utf-8") as f:
+            json.load(f)  # load_portfolio treats a damaged file as an empty portfolio
+    except (OSError, ValueError):
+        return "no_portfolio"
+    try:
+        if not overwrite and tracking.has_day(today):
+            return "exists"
+        market = market_snapshot(con)
+        valuation = value_portfolio(con, load_portfolio(), market)
+        if any("error" in i for i in valuation["items"]):
+            return "incomplete"
+        if not valuation["total"] and not tracking.load_history():
+            return "empty"
+        tracking.upsert_day(tracking.build_day(today, valuation, market, source))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, duckdb.Error):
+        return "failed"
+    return "recorded"
+
+
+def portfolio_record_check(con: duckdb.DuckDBPyConnection) -> Tuple[str, str, str]:
+    """The collector's daily record, as a quality check; a problem here never stops the collection."""
+    status = record_today(con, "collector")
+    detail = {
+        "recorded": "today's portfolio value recorded",
+        "no_portfolio": "no readable data/portfolio.json, nothing recorded",
+        "empty": "portfolio is empty, nothing recorded yet",
+        "incomplete": "a holding has no price; today is not recorded",
+        "failed": "could not record today's value; check data/portfolio_history.json",
+    }[status]
+    return ("portfolio_record", "warn" if status in ("incomplete", "failed") else "ok", detail)
+
+
 def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
-          live: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+          live: Optional[List[Dict[str, Any]]] = None, record_status: Optional[str] = None) -> Dict[str, Any]:
     market = market_snapshot(con, live)
     return {
         "generated_at": datetime.now(),
@@ -259,6 +307,7 @@ def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
         "portfolio": pf,
         "valuation": value_portfolio(con, pf, market),
         "context": context_series(con),
+        "tracking": dict(tracking.report(), record_status=record_status),
     }
 
 
@@ -309,11 +358,13 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(datastore.BASE_DIR, "dashboard.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/api/state":
-            return self._with_db(lambda con: self._json(200, state(con, load_portfolio(), get_live_prices())))
+            # Covers days the collector did not run; the collector's later run replaces this row.
+            return self._with_db(lambda con: self._json(200, state(
+                con, load_portfolio(), get_live_prices(), record_today(con, "dashboard", overwrite=False))))
         self._send(404, b"not found", "text/plain")
 
     def do_POST(self):
-        if self.path != "/api/portfolio":
+        if self.path not in ("/api/portfolio", "/api/flows", "/api/flows/delete"):
             return self._send(404, b"not found", "text/plain")
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -323,11 +374,17 @@ class Handler(BaseHTTPRequestHandler):
 
         def save(con):
             try:
-                clean = validate_portfolio(con, payload)
+                if self.path == "/api/flows":
+                    tracking.add_flow(payload)
+                elif self.path == "/api/flows/delete":
+                    tracking.delete_flow(str(payload.get("id")))
+                else:
+                    save_portfolio(validate_portfolio(con, payload))
             except ValueError as e:
                 return self._json(400, {"error": str(e)})
-            save_portfolio(clean)
-            return self._json(200, state(con, clean, get_live_prices()))
+            # Saving holdings replaces today's record, so changes made today count as today's.
+            status = record_today(con, "dashboard") if self.path == "/api/portfolio" else None
+            return self._json(200, state(con, load_portfolio(), get_live_prices(), status))
         return self._with_db(save)
 
 

@@ -13,6 +13,7 @@
   --bg: #f6f5f1; --card: #ffffff; --border: #e3e1d9; --text: #1b1b19; --muted: #6b6a64; --faint: #9a988f;
   --accent: #2a78d6; --accent-soft: #e7f0fb; --good: #0f7a3d; --good-soft: #e3f4ea; --warn: #9a6200; --warn-soft: #fbf1dc;
   --bad: #b3261e; --bad-soft: #fbe7e5; --grid: #e7e5de; --track: #eeece6;
+  --s-you: #2a78d6; --s-mix: #eb6834; --s-gold: #1baf7a; --s-usd: #eda100;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -20,6 +21,7 @@
     --bg: #141413; --card: #1c1c1a; --border: #2e2e2b; --text: #f0efec; --muted: #b3b1a8; --faint: #7d7b74;
     --accent: #5a9cec; --accent-soft: #1d2a3b; --good: #4cc27c; --good-soft: #17281e; --warn: #e6a93a; --warn-soft: #2d2513;
     --bad: #ef7a72; --bad-soft: #2f1a18; --grid: #2a2a27; --track: #2a2a27;
+    --s-you: #3987e5; --s-mix: #d95926; --s-gold: #199e70; --s-usd: #c98500;
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,7 +53,7 @@ tr.hl td { background: var(--good-soft); }
 .target { height: 4px; background: var(--track); border-radius: 2px; margin-top: 3px; position: relative; overflow: hidden; }
 .target > span { position: absolute; top: 0; bottom: 0; right: 0; background: var(--faint); border-radius: 2px; }
 .gap { font-size: 12px; color: var(--muted); margin-top: 2px; }
-input { font-family: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); width: 100%; }
+input, select { font-family: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); width: 100%; }
 button { font-family: inherit; font-size: 14px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: .6; cursor: wait; }
@@ -60,6 +62,12 @@ button:disabled { opacity: .6; cursor: wait; }
 .hold-row { display: grid; grid-template-columns: 1fr 1fr 36px; gap: 8px; margin-bottom: 6px; }
 .err { color: var(--bad); font-size: 13px; margin-top: 6px; min-height: 1.2em; }
 .chart { position: relative; height: 220px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-left: 6px; vertical-align: -1px; }
+tr.you td { font-weight: 700; }
+.toggle button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.toggle { display: flex; gap: 6px; margin: 12px 0 6px; }
+.notes { font-size: 13px; margin-top: 10px; display: grid; gap: 6px; }
+.notes div { padding: 6px 10px; border-radius: 8px; }
 details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-top: 8px; }
 ul.plain { list-style: none; font-size: 13px; }
 ul.plain li { padding: 3px 0; }
@@ -109,6 +117,23 @@ ul.plain li { padding: 3px 0; }
       <button type="button" class="primary" id="save">ذخیره</button>
       <div class="err" id="save-err" role="alert"></div>
     </div>
+  </section>
+
+  <section class="card" style="margin-bottom:16px" id="tracking">
+    <h2>عملکرد سبد در برابر نگه‌داشتن ساده</h2>
+    <div class="sub">بازده زمان‌وزنی: پولی که وارد یا خارج می‌کنید سود یا زیان حساب نمی‌شود. هر مقایسه یک بار در اولین رکورد خریده و بدون ریبالانس نگه داشته می‌شود و کارمزد ندارد.</div>
+    <div id="track-body" style="margin-top:10px"></div>
+    <h2 style="margin-top:18px">واریز و برداشت</h2>
+    <div class="sub">با تاریخ روزی که سبد را به‌روز کردید ثبت کنید. سود نقدی و جابه‌جایی بین دارایی‌ها اینجا نمی‌آیند. فقط روی همین کامپیوتر ذخیره می‌شود.</div>
+    <div class="form-grid">
+      <div><label for="f-date">تاریخ شمسی</label><input id="f-date" placeholder="۱۴۰۵/۰۸/۱۶" dir="ltr"></div>
+      <div><label for="f-kind">نوع</label><select id="f-kind"><option value="deposit">واریز</option><option value="withdrawal">برداشت</option></select></div>
+      <div><label for="f-amount">مبلغ (تومان)</label><input id="f-amount" inputmode="numeric" dir="ltr"></div>
+      <div><label for="f-note">یادداشت (اختیاری)</label><input id="f-note" maxlength="200"></div>
+    </div>
+    <button type="button" class="primary" id="f-add">ثبت</button>
+    <div class="err" id="f-err" role="alert"></div>
+    <div class="tablewrap"><table><tbody id="f-list"></tbody></table></div>
   </section>
 
   <section class="card" style="margin-bottom:16px">
@@ -273,6 +298,114 @@ function renderGold(g) {
   if (btn) btn.onclick = () => { showAllGold = !showAllGold; renderGold(g); };
 }
 
+const TRACK = {
+  you: ['سبد شما', '--s-you'],
+  mix: ['۵۰٪ شاخص کل، ۵۰٪ طلای ۱۸ عیار', '--s-mix'],
+  gold: ['فقط طلای ۱۸ عیار', '--s-gold'],
+  usd: ['فقط دلار آزاد', '--s-usd'],
+};
+const NOT_RECORDED = {
+  incomplete: 'امروز ثبت نشد: قیمت یکی از دارایی‌ها پیدا نشد و ارزش ناقص، زیان واقعی به نظر می‌رسید.',
+  failed: 'امروز ثبت نشد: فایل تاریخچه نوشته نشد.',
+};
+let trackView = 'rial';
+
+function issueText(i) {
+  if (i.kind === 'unexplained') return `${jdate(i.d)}: ارزش سبد ${bigToman(Math.abs(i.amount))} ${i.amount > 0 ? 'بیشتر' : 'کمتر'} از چیزی شد که قیمت‌ها و فهرست واریز و برداشت توضیح می‌دهند. این تفاوت الان جزو بازده است. اگر پولی جابه‌جا شده، آن را با تاریخ همین روز ثبت کنید.`;
+  if (i.kind === 'broken') return `${jdate(i.d)}: واریز یا برداشت ثبت‌شده با ارزش سبد نمی‌خواند، پس این بازه در بازده حساب نشد. تاریخ و مبلغ را بررسی کنید.`;
+  return `${jdate(i.d)}: واریز یا برداشت در فاصله‌ای بدون رکورد افتاده، پس بازده این بازه تقریبی است.`;
+}
+
+function renderTracking(t) {
+  const box = document.getElementById('track-body');
+  const notes = [];
+  if (NOT_RECORDED[t.record_status]) notes.push(['warn', NOT_RECORDED[t.record_status]]);
+  if (t.error) {
+    box.innerHTML = `<div class="notes"><div class="fail">${esc(t.error)} فایل دست‌نخورده مانده است؛ آن را اصلاح کنید تا ثبت ادامه پیدا کند.</div></div>`;
+    document.getElementById('f-list').innerHTML = '';
+    return;
+  }
+  if (t.ready && t.short) notes.push(['info', `فقط ${fa(t.days)} روز داده؛ برای نتیجه‌گیری خیلی کوتاه است.`]);
+  for (const i of t.issues) notes.push([i.kind === 'approximate' ? 'info' : 'warn', issueText(i)]);
+  const noteHtml = notes.length ? `<div class="notes">${notes.map(([c, x]) => `<div class="${c}">${x}</div>`).join('')}</div>` : '';
+  if (!t.ready) {
+    const msg = t.records ? 'اولین رکورد ثبت شد. مقایسه از رکورد بعدی شروع می‌شود.'
+      : 'هنوز رکوردی نیست. بعد از ثبت سبد، هر روز خودکار ثبت می‌شود.';
+    box.innerHTML = `<p class="sub">${msg}</p>${noteHtml}`;
+  } else {
+    const you = t.rows.find(r => r.key === 'you');
+    const rows = t.rows.map(r => `<tr class="${r.key === 'you' ? 'you' : ''}">
+      <td><i class="swatch" style="background:var(${TRACK[r.key][1]})"></i>${TRACK[r.key][0]}</td>
+      <td>${pct(r.twr_rial)}</td><td>${pct(r.twr_usd)}</td>
+      <td>${r.key === 'you' ? '' : pct(you.twr_usd - r.twr_usd)}</td></tr>`).join('');
+    const flowText = t.net_flows ? ` · خالص ${t.net_flows < 0 ? 'برداشت' : 'واریز'} ${bigToman(Math.abs(t.net_flows))}` : '';
+    const recent = t.recent.map(r => `<tr><td>${jdate(r.d)}</td><td>${bigToman(r.total)}</td>
+      ${Object.keys(CLASSES).map(k => `<td>${bigToman(r.by_class?.[k] || 0)}</td>`).join('')}</tr>`).join('');
+    box.innerHTML = `
+      <div class="sub">از ${jdate(t.start)} تا ${jdate(t.end)} (${fa(t.days)} روز، ${fa(t.records_used)} رکورد)</div>
+      <div class="tablewrap" style="margin-top:8px"><table>
+        <thead><tr><th></th><th>بازده ریالی</th><th>بازده دلاری</th><th>اختلاف دلاری سبد شما با این</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <div class="sub" style="margin-top:6px">ارزش سبد: ${bigToman(t.value_end)}${flowText} · سود یا زیان ریالی بدون واریز و برداشت: ${t.profit < 0 ? '−' : ''}${bigToman(Math.abs(t.profit))}</div>
+      ${noteHtml}
+      <div class="toggle" role="group" aria-label="واحد نمودار">
+        <button type="button" data-view="rial" aria-pressed="${trackView === 'rial'}">به ریال</button>
+        <button type="button" data-view="usd" aria-pressed="${trackView === 'usd'}">به دلار آزاد</button>
+      </div>
+      <div class="chart"><canvas id="c-track" role="img" aria-label="رشد صد واحد سرمایه در سبد شما و سه مقایسه"></canvas></div>
+      <div class="legend" style="flex-wrap:wrap">${Object.values(TRACK).map(([l, c]) => `<span><i style="background:var(${c})"></i>${l}</span>`).join('')}</div>
+      <details><summary>ارزش ثبت‌شده به تفکیک دارایی (${fa(t.recent.length)} رکورد آخر)</summary>
+        <div class="tablewrap"><table><thead><tr><th>تاریخ</th><th>کل</th>${Object.values(CLASSES).map(l => `<th>${l}</th>`).join('')}</tr></thead><tbody>${recent}</tbody></table></div>
+      </details>`;
+    box.querySelectorAll('[data-view]').forEach(b => { b.onclick = () => { trackView = b.dataset.view; renderTracking(t); }; });
+    trackChart(t);
+  }
+  const STATUS = {before_start: 'قبل از اولین رکورد؛ جزو ارزش شروع است', pending: 'منتظر رکورد بعدی', counted: ''};
+  document.getElementById('f-list').innerHTML = t.flows.map(f => `<tr>
+    <td>${jdate(f.d)}</td><td>${f.kind === 'deposit' ? 'واریز' : 'برداشت'}</td><td>${bigToman(f.amount_toman * 10)}</td>
+    <td>${esc(f.note)}</td><td class="muted">${STATUS[f.status] ?? ''}</td>
+    <td><button type="button" data-del="${esc(f.id)}" aria-label="حذف">×</button></td></tr>`).join('');
+  document.querySelectorAll('[data-del]').forEach(b => { b.onclick = () => postFlow('/api/flows/delete', {id: b.dataset.del}); });
+}
+
+function trackChart(t) {
+  if (charts.track) charts.track.destroy();
+  const grid = css('--grid'), muted = css('--faint');
+  const at = s => trackView === 'usd' ? s.usd_view : s;
+  charts.track = new Chart(document.getElementById('c-track'), {
+    type: 'line',
+    data: {labels: t.series.map(s => s.d), datasets: Object.entries(TRACK).map(([k, [label, c]]) => ({
+      label, data: t.series.map(s => at(s)[k] * 100), borderColor: css(c), backgroundColor: css(c),
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0, borderCapStyle: 'round', borderJoinStyle: 'round'}))},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {rtl: true, callbacks: {
+        title: items => jdate(items[0].label), label: c => ' ' + c.dataset.label + ': ' + fa(c.parsed.y, 1)}}},
+      scales: {x: {grid: {display: false}, ticks: {color: muted, maxTicksLimit: 6, maxRotation: 0, callback: function (v) { return jdate(this.getLabelForValue(v)); }}},
+        y: {grid: {color: c => c.tick.value === 100 ? muted : grid}, border: {display: false}, ticks: {color: muted, maxTicksLimit: 6, callback: v => fa(v)}}}}
+  });
+}
+
+function jalaliToday() {
+  const parts = new Intl.DateTimeFormat('en-u-ca-persian-nu-latn', {year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(new Date());
+  const get = t => parts.find(p => p.type === t).value;
+  return `${get('year')}/${get('month')}/${get('day')}`;
+}
+
+async function postFlow(url, body) {
+  const err = document.getElementById('f-err');
+  err.textContent = '';
+  try {
+    const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const s = await r.json();
+    if (!r.ok) { err.textContent = s.error || 'ثبت نشد'; return false; }
+    render(s);
+    return true;
+  } catch (e) {
+    err.textContent = 'ارتباط با سرور برقرار نشد.';
+    return false;
+  }
+}
+
 function renderHealth(h) {
   const label = {ok: 'داده‌ها کامل', warn: 'هشدار در داده‌ها', fail: 'خطا در داده‌ها'}[h.worst];
   document.getElementById('health-badge').innerHTML = `<span class="badge ${h.worst}">${label}</span>`;
@@ -307,6 +440,7 @@ function render(s) {
   renderKpis(s.market);
   renderAlloc(s.valuation);
   renderGold(s.gold_funds);
+  renderTracking(s.tracking);
   lineChart('c-ted', s.context.tedpix_usd, {});
   lineChart('c-bub', s.context.gold18_bubble, {base: 0, suffix: '٪'});
 }
@@ -327,6 +461,13 @@ async function load() {
 }
 
 document.getElementById('add-row').onclick = () => holdingRow();
+document.getElementById('f-date').value = jalaliToday();
+document.getElementById('f-add').onclick = async () => {
+  const ok = await postFlow('/api/flows', {d: document.getElementById('f-date').value,
+    kind: document.getElementById('f-kind').value, amount_toman: document.getElementById('f-amount').value,
+    note: document.getElementById('f-note').value});
+  if (ok) { document.getElementById('f-amount').value = ''; document.getElementById('f-note').value = ''; }
+};
 document.getElementById('save').onclick = async () => {
   const err = document.getElementById('save-err');
   err.textContent = '';
