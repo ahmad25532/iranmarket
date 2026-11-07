@@ -18,6 +18,8 @@ buy), below yesterday a sell queue (cannot sell). Days without trades cannot be 
 
 import duckdb
 
+from sources import FUND_ISIN_PREFIX
+
 # A single-price day this far from yesterday's reference price is treated as a locked queue.
 QUEUE_MIN_MOVE = 0.015
 # Factors outside this range are data errors (an unrecorded unit change, a typo), not corporate actions.
@@ -59,17 +61,18 @@ SELECT
 FROM c
 """
 
+# TSETMC's paper types are unusable (see sources.PAPER_TYPES), so shares are recognised by ISIN: IRO1
+# (Bourse), IRO3 (Fara Bourse), IRO7 (base market). Options and futures use other IRO prefixes.
 CLASS_SQL = """
 CREATE OR REPLACE TABLE instrument_class AS
 SELECT i.ins_code, i.ticker, i.name,
     CASE
-        WHEN i.paper_type IN (1, 2) THEN 'stock'
+        WHEN i.isin LIKE 'IRO1%' OR i.isin LIKE 'IRO3%' OR i.isin LIKE 'IRO7%' THEN 'stock'
         WHEN f.fund_type = 4 THEN 'etf_fixed_income'
         WHEN f.fund_type = 5 THEN 'etf_commodity'
         ELSE 'etf_equity'
     END AS asset_class
 FROM instruments i LEFT JOIN fipiran_funds f USING (ins_code)
-WHERE i.paper_type IN (1, 2, 8)
 """
 
 
@@ -87,7 +90,7 @@ WITH g AS (
 e AS (
     SELECT p.ins_code, p.d, p.adj_close / lag(p.adj_close) OVER (PARTITION BY p.ins_code ORDER BY p.d) - 1 AS r
     FROM price_adj p JOIN instruments i USING (ins_code)
-    WHERE i.paper_type = 8 AND p.trades > 0 AND p.d >= (SELECT max(d) FROM price_adj) - INTERVAL 400 DAY
+    WHERE i.isin LIKE '{FUND_ISIN_PREFIX}%' AND p.trades > 0 AND p.d >= (SELECT max(d) FROM price_adj) - INTERVAL 400 DAY
 )
 SELECT ins_code, count(*) AS days, corr(e.r, g.gr) AS gold_corr, stddev(e.r) / stddev(g.gr) AS vol_ratio
 FROM e JOIN g USING (d)

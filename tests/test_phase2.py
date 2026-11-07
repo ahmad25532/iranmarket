@@ -14,10 +14,10 @@ DAYS = [date(2026, 1, 3) + timedelta(days=i) for i in range(6)]
 CODE = "1"
 
 
-def make_db(bars, ins_code=CODE, paper_type=1):
+def make_db(bars, ins_code=CODE, isin="IRO1TEST0001"):
     """bars: list of dicts per day with close / yesterday / high / low / last / value / volume / trades."""
     con = datastore.connect(":memory:")
-    datastore.upsert(con, "instruments", [{"ins_code": ins_code, "ticker": "تست", "paper_type": paper_type}])
+    datastore.upsert(con, "instruments", [{"ins_code": ins_code, "ticker": "تست", "isin": isin}])
     rows = []
     for d, b in zip(DAYS, bars):
         close = b["close"]

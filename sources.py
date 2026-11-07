@@ -15,9 +15,11 @@ TSETMC = "cdn.tsetmc.com"
 TGJU = "api.tgju.org"
 FIPIRAN = "www.fipiran.com"
 
-PAPER_STOCKS = 1
-PAPER_BASE_MARKET = 2
-PAPER_ETF = 8
+# Market-watch paper types: shares, base market, funds. Since 2026-11-01 TSETMC ignores this filter and
+# returns everything (shares, funds, options, futures, bonds), so what an instrument is comes from its
+# ISIN instead. Fund units start with IRT: IRT1/IRT3 (traded funds), IRTK (commodity), IRTE (energy, projects).
+PAPER_TYPES = (1, 2, 8)
+FUND_ISIN_PREFIX = "IRT"
 
 MAIN_INDICES = {
     "32097828799138957": "شاخص کل بورس",
@@ -107,24 +109,25 @@ def parse_overview(ov: Dict[str, Any], market: int) -> Dict[str, Any]:
 
 # ---------- market watch (end-of-day snapshot) ----------
 
-def fetch_market_watch(http: HttpClient, paper_type: int) -> List[Dict[str, Any]]:
+def fetch_market_watch(http: HttpClient) -> List[Dict[str, Any]]:
+    """The whole list in one request. All types are named so that a restored filter cannot narrow it to one."""
+    types = "&".join(f"paperTypes%5B{i}%5D={t}" for i, t in enumerate(PAPER_TYPES))
     path = (
-        f"/api/ClosingPrice/GetMarketWatch?market=0&industrialGroup=&paperTypes%5B0%5D={paper_type}"
+        f"/api/ClosingPrice/GetMarketWatch?market=0&industrialGroup=&{types}"
         f"&showTraded=false&withBestLimits=false&hEven=0&RefID=0"
     )
     rows = http.get_json(TSETMC, path, timeout=30).get("marketwatch")
     if rows is None:
-        raise ValueError(f"no 'marketwatch' key for paperType {paper_type}")
+        raise ValueError("no 'marketwatch' key")
     return rows
 
 
-def parse_watch_instrument(row: Dict[str, Any], paper_type: int, d: date) -> Dict[str, Any]:
+def parse_watch_instrument(row: Dict[str, Any], d: date) -> Dict[str, Any]:
     return {
         "ins_code": str(row.get("insCode")),
         "ticker": str(row.get("lva") or "").strip(),
         "name": str(row.get("lvc") or "").strip(),
         "isin": row.get("insID"),
-        "paper_type": paper_type,
         "sector_code": str(row.get("csv") or "").strip() or None,
         "first_seen": d,
         "last_seen": d,

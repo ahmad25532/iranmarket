@@ -93,13 +93,12 @@ def _upsert_instruments(con: duckdb.DuckDBPyConnection, rows: List[Dict[str, Any
     con.execute("UPDATE instruments SET first_seen = last_seen WHERE first_seen IS NULL")
 
 
-def _universe(con: duckdb.DuckDBPyConnection, paper_types: Tuple[int, ...] = (1, 2, 8)) -> List[str]:
-    """Normal-board stocks and ETFs (block-trade boards and rights issues excluded)."""
-    placeholders = ", ".join("?" for _ in paper_types)
+def _universe(con: duckdb.DuckDBPyConnection, funds_only: bool = False) -> List[str]:
+    """Normal-board instruments, or only the funds (block-trade boards and rights issues excluded)."""
+    where = f"WHERE isin LIKE '{sources.FUND_ISIN_PREFIX}%'" if funds_only else ""
     return [
         code for code, ticker in con.execute(
-            f"SELECT ins_code, ticker FROM instruments WHERE paper_type IN ({placeholders}) ORDER BY ins_code",
-            list(paper_types),
+            f"SELECT ins_code, ticker FROM instruments {where} ORDER BY ins_code"
         ).fetchall() if sources.is_normal_board(ticker)
     ]
 
@@ -116,21 +115,16 @@ def take_snapshot(run: Run, d: date, final: bool) -> Tuple[Dict[str, Dict[str, A
     """End-of-day market watch, client flows, ETF NAV and sector indices for market date d."""
     con, http = run.con, run.http
     prices_today: Dict[str, Dict[str, Any]] = {}
-    etf_codes: List[str] = []
-    for pt in (sources.PAPER_STOCKS, sources.PAPER_BASE_MARKET, sources.PAPER_ETF):
-        rows = run.fetch("market_watch", f"paperType={pt}", lambda pt=pt: sources.fetch_market_watch(http, pt))
-        if not rows:
+    rows = run.fetch("market_watch", "all", lambda: sources.fetch_market_watch(http)) or []
+    if rows:
+        _upsert_instruments(con, [sources.parse_watch_instrument(r, d) for r in rows])
+    for r in rows:
+        # Block-trade boards and rights issues are kept as instruments but carry no usable prices.
+        if not sources.is_normal_board(str(r.get("lva") or "")):
             continue
-        _upsert_instruments(con, [sources.parse_watch_instrument(r, pt, d) for r in rows])
-        for r in rows:
-            # Block-trade boards and rights issues are kept as instruments but carry no usable prices.
-            if not sources.is_normal_board(str(r.get("lva") or "")):
-                continue
-            p = sources.parse_watch_price(r, d)
-            if p:
-                prices_today[p["ins_code"]] = p
-            if pt == sources.PAPER_ETF:
-                etf_codes.append(str(r.get("insCode")))
+        p = sources.parse_watch_price(r, d)
+        if p:
+            prices_today[p["ins_code"]] = p
     n = datastore.upsert(con, "daily_prices", prices_today.values())
     print(f"  prices: {n} traded instruments")
 
@@ -144,7 +138,8 @@ def take_snapshot(run: Run, d: date, final: bool) -> Tuple[Dict[str, Dict[str, A
         )
         print(f"  client flows: {n}")
 
-    etf_codes = sorted(set(etf_codes))
+    listed = {str(r.get("insCode")) for r in rows}
+    etf_codes = [c for c in _universe(con, funds_only=True) if c in listed]
     navs = run.fetch_many("etf_nav", [(c, lambda c=c: sources.fetch_etf_nav(http, c)) for c in etf_codes])
     nav_rows = [
         row for code, raw in navs.items()
@@ -165,7 +160,8 @@ def take_snapshot(run: Run, d: date, final: bool) -> Tuple[Dict[str, Dict[str, A
         ]
         print(f"  sector indices: {datastore.upsert(con, 'index_daily', rows)}")
 
-    datastore.upsert(con, "snapshots", [{"d": d, "taken_at": datetime.now(), "final": final}])
+    # With a single market-watch request, a failure leaves the day without prices: never call that final.
+    datastore.upsert(con, "snapshots", [{"d": d, "taken_at": datetime.now(), "final": final and bool(rows)}])
     return prices_today, len(etf_codes)
 
 
@@ -313,7 +309,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
         datastore.upsert(con, "filled_days", [{"d": x, "kind": "prices_flows", "filled_at": datetime.now()} for x in pf_gaps])
     if nav_gaps:
         print(f"  catch-up: NAV missing on {len(nav_gaps)} trading days since {nav_gaps[0]}")
-        fill_nav(run, _universe(con, (sources.PAPER_ETF,)), show_all=False)
+        fill_nav(run, _universe(con, funds_only=True), show_all=False)
         # Fipiran publishes a day or two late: only days it has had time to publish are marked as done.
         settled = days[:-3]
         datastore.upsert(con, "filled_days", [
@@ -325,7 +321,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
     if new:
         print(f"  new instruments: {len(new)}")
         fill_prices_and_flows(run, new, 0, "new instruments")
-        etfs = set(_universe(con, (sources.PAPER_ETF,)))
+        etfs = set(_universe(con, funds_only=True))
         fill_nav(run, [c for c in new if c in etfs], show_all=True)
 
     # 4) Free-market USD / gold / coin / ounce; a longer window after a long gap
@@ -390,10 +386,9 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
 
     if not con.execute("SELECT count(*) FROM instruments").fetchone()[0]:
         today = date.today()
-        for pt in (sources.PAPER_STOCKS, sources.PAPER_BASE_MARKET, sources.PAPER_ETF):
-            rows = run.fetch("market_watch", f"paperType={pt}", lambda pt=pt: sources.fetch_market_watch(http, pt))
-            if rows:
-                _upsert_instruments(con, [sources.parse_watch_instrument(r, pt, today) for r in rows])
+        rows = run.fetch("market_watch", "all", lambda: sources.fetch_market_watch(http))
+        if rows:
+            _upsert_instruments(con, [sources.parse_watch_instrument(r, today) for r in rows])
 
     universe = _universe(con) if refresh else _new_instruments(con)
     if limit:
@@ -401,7 +396,7 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
     print(f"  instruments to backfill: {len(universe)}")
     fill_prices_and_flows(run, universe, 0, "backfill")
 
-    etfs = _universe(con, (sources.PAPER_ETF,))
+    etfs = _universe(con, funds_only=True)
     if not refresh:
         nav_done = {r[0] for r in con.execute("SELECT ins_code FROM backfill_status WHERE kind = 'nav'").fetchall()}
         etfs = [c for c in etfs if c not in nav_done]
