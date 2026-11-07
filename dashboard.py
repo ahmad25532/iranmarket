@@ -7,6 +7,7 @@ Shows only what passed the Phase 3 out-of-sample tests, plus context and data he
 - free-market USD, 18k gold, its bubble vs intrinsic value, TEDPIX in dollars (context only)
 - global gold: the ounce's drivers against their own history, what moves Iranian 18k gold, and
   which global timing signals were tested (none passed out of sample)
+- treasury bill yield as the risk-free rate (context, not a signal)
 - whether today's data is complete and final
 
 Run:  .venv\\Scripts\\python.exe dashboard.py   ->  http://127.0.0.1:8085
@@ -29,6 +30,7 @@ import freeusd
 import globalgold
 import goldfunds
 import sources
+import treasury
 from net import FetchError, HttpClient
 
 PORT = 8085
@@ -265,6 +267,7 @@ def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
         "context": context_series(con),
         "global_gold": globalgold.dashboard(con),
         "free_usd": freeusd.dashboard(con),
+        "bills": treasury.dashboard(con),
     }
 
 

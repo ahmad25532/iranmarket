@@ -207,6 +207,13 @@ ul.plain li { padding: 3px 0; }
     </details>
   </section>
 
+  <section class="card" id="bills-card" style="margin-bottom:16px;display:none">
+    <h2>نرخ بدون ریسک: بازده اسناد خزانه</h2>
+    <div class="sub">فقط برای زمینه؛ <b>سیگنال نیست</b> و به عنوان سیگنال آزمون نشده است. بازده تا سررسید اخزا در بازار عادی، فقط از روزهای دارای معامله. تاریخچه حدود ۳ سال است و فقط اوراقی را دارد که هنوز سررسید نشده‌اند.</div>
+    <div class="sub" id="bills-now" style="margin-top:8px"></div>
+    <div class="chart"><canvas id="c-bills" role="img" aria-label="بازده تا سررسید اسناد خزانه، آخرین مقدار هر ماه"></canvas></div>
+  </section>
+
   <section class="grid">
     <div class="card">
       <h2>شاخص کل به دلار آزاد</h2>
@@ -530,6 +537,27 @@ function renderUsd(u) {
   });
 }
 
+function renderBills(b) {
+  const card = document.getElementById('bills-card');
+  card.style.display = b && b.available ? '' : 'none';
+  if (!b || !b.available) return;
+  document.getElementById('bills-now').textContent =
+    'میانه همه اوراق: ' + fa(b.ytm_median * 100, 1) + '٪ در سال، از ' + fa(b.n_bills) + ' ورقه با میانه ' + fa(b.median_days) + ' روز تا سررسید' +
+    (b.ytm_short !== null ? '؛ اوراق تا یک سال: ' + fa(b.ytm_short * 100, 1) + '٪ از ' + fa(b.n_short) + ' ورقه' : '') + '. تاریخ ' + jdate(b.as_of) + '.';
+  if (charts['c-bills']) charts['c-bills'].destroy();
+  const grid = css('--grid'), muted = css('--faint'), accent = css('--accent');
+  const line = (label, key, color, dash) => ({label, data: b.monthly.map(r => r[key]), borderColor: color, borderDash: dash,
+    borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: false});
+  charts['c-bills'] = new Chart(document.getElementById('c-bills'), {
+    type: 'line',
+    data: {labels: b.monthly.map(r => r.m), datasets: [line('میانه همه اوراق', 'median', accent, []), line('اوراق تا یک سال', 'short', muted, [5, 4])]},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: true, labels: {color: muted, boxWidth: 18}}, tooltip: {rtl: true, callbacks: {label: c => ' ' + c.dataset.label + ': ' + fa(c.parsed.y, 1) + '٪'}}},
+      scales: {x: {grid: {display: false}, ticks: {color: muted, maxTicksLimit: 8, maxRotation: 0, callback: function (v) { return this.getLabelForValue(v).slice(0, 7); }}},
+        y: {grid: {color: grid}, border: {display: false}, ticks: {color: muted, maxTicksLimit: 6, callback: v => fa(v) + '٪'}}}}
+  });
+}
+
 function render(s) {
   current = s;
   renderHealth(s.health);
@@ -540,6 +568,7 @@ function render(s) {
   lineChart('c-bub', s.context.gold18_bubble, {base: 0, suffix: '٪'});
   renderGlobal(s.global_gold);
   renderUsd(s.free_usd);
+  renderBills(s.bills);
 }
 
 async function load() {

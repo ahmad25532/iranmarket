@@ -146,6 +146,18 @@ def check_usd_inputs_freshness(con: duckdb.DuckDBPyConnection, today: date) -> C
     return ("usd_inputs_freshness", "ok", "NIMA, CBI inflation and US CPI up to date")
 
 
+def check_bill_yields(con: duckdb.DuckDBPyConnection, today: date, unparsed: int) -> Check:
+    """Treasury bills trade on every session, so a week without a usable yield means something broke."""
+    last = _scalar(con, "SELECT max(d) FROM bill_yield_daily")
+    if last is None:
+        return ("bill_yields", "warn", "no treasury bill yields yet (run: collector.py bills)")
+    if (today - last).days > 7:
+        return ("bill_yields", "warn", f"last treasury bill yield is from {last}")
+    if unparsed:
+        return ("bill_yields", "warn", f"{unparsed} bills have no maturity date in their name and were skipped")
+    return ("bill_yields", "ok", f"treasury bill yields up to {last}")
+
+
 def check_fetch_errors(con: duckdb.DuckDBPyConnection, run_id: str) -> Check:
     total, errors = con.execute(
         "SELECT count(*), count(*) FILTER (WHERE status = 'error') FROM fetch_log WHERE run_id = ?", [run_id]
