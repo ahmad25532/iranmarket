@@ -124,6 +124,19 @@ CREATE TABLE IF NOT EXISTS macro_daily (
 ALTER TABLE macro_daily ADD COLUMN IF NOT EXISTS source VARCHAR;
 ALTER TABLE macro_daily ADD COLUMN IF NOT EXISTS as_of TIMESTAMP;
 
+-- EPS and P/E as TSETMC's market watch showed them. seen_on is the calendar day the row was fetched,
+-- not the market date, so a value can never be dated before it was public: a backtest may only use
+-- rows with seen_on <= the signal day. No row means TSETMC showed nothing (funds, options, unreported).
+-- See docs/fundamentals_findings.md for what eps and pe contain.
+CREATE TABLE IF NOT EXISTS fundamentals_seen (
+    ins_code  VARCHAR,
+    seen_on   DATE,
+    seen_at   TIMESTAMP,
+    eps       DOUBLE,
+    pe        DOUBLE,
+    PRIMARY KEY (ins_code, seen_on)
+);
+
 -- One row per market date for which an end-of-day snapshot was taken (final = market was closed).
 CREATE TABLE IF NOT EXISTS snapshots (
     d         DATE PRIMARY KEY,
@@ -179,6 +192,7 @@ TABLE_KEYS = {
     "index_daily": ["index_code", "d"],
     "market_overview": ["market", "d"],
     "macro_daily": ["series", "d"],
+    "fundamentals_seen": ["ins_code", "seen_on"],
     "backfill_status": ["ins_code", "kind"],
     "snapshots": ["d"],
     "filled_days": ["d", "kind"],

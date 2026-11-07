@@ -104,6 +104,22 @@ def check_nav(con: duckdb.DuckDBPyConnection, d: date, etf_count: int) -> Check:
     return ("etf_nav", "ok", f"NAV captured for {n}/{etf_count} ETFs")
 
 
+def check_fundamentals(con: duckdb.DuckDBPyConnection, seen_on: date) -> Check:
+    # A day missed here cannot be fetched later, and an API change would otherwise lose data silently.
+    n = _scalar(con, "SELECT count(*) FROM fundamentals_seen WHERE seen_on = ?", [seen_on]) or 0
+    prev = con.execute(
+        "SELECT count(*) FROM fundamentals_seen WHERE seen_on < ? GROUP BY seen_on ORDER BY seen_on DESC LIMIT 5",
+        [seen_on],
+    ).fetchall()
+    if n == 0:
+        return ("fundamentals", "fail", f"no EPS or P/E stored for {seen_on}; this day cannot be recovered later")
+    if prev:
+        med = sorted(r[0] for r in prev)[len(prev) // 2]
+        if n < 0.7 * med:
+            return ("fundamentals", "warn", f"{n} instruments with EPS or P/E vs recent median {med}")
+    return ("fundamentals", "ok", f"{n} instruments with EPS or P/E")
+
+
 def check_macro_freshness(con: duckdb.DuckDBPyConnection, today: date, series: List[str]) -> Check:
     stale = []
     for s in series:

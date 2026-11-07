@@ -110,6 +110,15 @@ def _trading_days(con: duckdb.DuckDBPyConnection, since: date) -> List[date]:
     ).fetchall()]
 
 
+def store_fundamentals(con: duckdb.DuckDBPyConnection, rows: List[Dict[str, Any]], seen_at: datetime) -> int:
+    """Saves EPS and P/E for normal boards, dated by when they were fetched rather than by the market date."""
+    parsed = (
+        sources.parse_watch_fundamentals(r, seen_at) for r in rows
+        if sources.is_normal_board(str(r.get("lva") or ""))
+    )
+    return datastore.upsert(con, "fundamentals_seen", [r for r in parsed if r])
+
+
 # ---------------------------------------------------------------- building blocks
 
 def take_snapshot(run: Run, d: date, final: bool) -> Tuple[Dict[str, Dict[str, Any]], int]:
@@ -122,6 +131,7 @@ def take_snapshot(run: Run, d: date, final: bool) -> Tuple[Dict[str, Dict[str, A
         if not rows:
             continue
         _upsert_instruments(con, [sources.parse_watch_instrument(r, pt, d) for r in rows])
+        store_fundamentals(con, rows, datetime.now())
         for r in rows:
             # Block-trade boards and rights issues are kept as instruments but carry no usable prices.
             if not sources.is_normal_board(str(r.get("lva") or "")):
@@ -374,6 +384,7 @@ def snapshot_checks(
         quality.check_flow_coverage(con, d),
         quality.check_flow_volume_consistency(con, d),
         quality.check_nav(con, d, etf_count),
+        quality.check_fundamentals(con, date.today()),
         ("spot_check", "fail" if mismatches else "ok",
          "; ".join(mismatches) if mismatches else f"{len(sample)} closes match the official daily list"),
     ]
@@ -436,6 +447,12 @@ def status(con: duckdb.DuckDBPyConnection) -> int:
         ).fetchone()
         span = f"  {lo} .. {hi}" if lo else ""
         print(f"  {table:<15} {n:>10,} rows{span}")
+
+    n, seen_days, lo, hi = con.execute(
+        "SELECT count(*), count(DISTINCT seen_on), min(seen_on), max(seen_on) FROM fundamentals_seen"
+    ).fetchone()
+    span = f"  {lo} .. {hi} ({seen_days} days)" if lo else ""
+    print(f"  {'fundamentals_seen':<15} {n:>10,} rows{span}")
 
     days = _trading_days(con, date.today() - timedelta(days=30))[-10:]
     if days:
