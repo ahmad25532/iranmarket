@@ -7,6 +7,7 @@ Usage:
     python collector.py daily --force      # retake today's snapshot even if it already exists
     python collector.py backfill           # full history for every listed stock/ETF + NAV + indices + TGJU
     python collector.py backfill --limit 20
+    python collector.py bills              # treasury bill yields only
     python collector.py status             # what is stored so far and the last 10 trading days' coverage
 
 `daily` is idempotent: when the computer was off for a day or a whole trip, the next run
@@ -29,6 +30,7 @@ import freeusd
 import globalgold
 import quality
 import sources
+import treasury
 from net import FetchError, HttpClient
 
 WORKERS = 6
@@ -259,6 +261,13 @@ def refresh_global(run: Run, full: bool) -> None:
     print("  free USD inputs: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
 
 
+def refresh_bills(run: Run, before: Optional[date] = None) -> int:
+    """Treasury bill yields; returns how many bills have no readable maturity, for the quality check."""
+    counts = treasury.refresh(run, before)
+    print(f"  treasury bills: {counts['fetched']}/{counts['bills']} fetched, {counts['rows']} rows, {counts['days']} days of yield")
+    return counts["unparsed"]
+
+
 def store_live_macro(con: duckdb.DuckDBPyConnection, rows: List[Dict[str, Any]]) -> int:
     """Stores live prices for days TGJU has not closed yet; never overwrites a closed-day row."""
     closed = {(s, d) for s, d in con.execute(
@@ -349,6 +358,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
     gap_days = (today - last_macro).days if last_macro else 20000
     refresh_tgju(run, max(30, gap_days + 10))
     refresh_global(run, full=False)
+    unparsed_bills = refresh_bills(run, before=None if closed else d)  # an open session's row is partial
 
     # 5) Rebuild dividend/capital-increase adjusted prices and queue flags from the raw tables
     adj = adjust.build(con)
@@ -369,6 +379,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
         quality.check_macro_freshness(con, today, list(sources.TGJU_SERIES)),
         quality.check_global_freshness(con, today),
         quality.check_usd_inputs_freshness(con, today),
+        quality.check_bill_yields(con, today, unparsed_bills),
         quality.check_fetch_errors(con, run.id),
     ]
     return 1 if quality.save_and_summarize(con, run.id, d, checks) else 0
@@ -436,6 +447,7 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
 
     refresh_tgju(run, 20000)
     refresh_global(run, full=True)
+    unparsed_bills = refresh_bills(run)
     adj = adjust.build(con)
     print(f"  adjusted prices rebuilt: {adj['rows']:,} rows, {adj['events']:,} corporate actions")
 
@@ -444,6 +456,7 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
         quality.check_macro_freshness(con, date.today(), list(sources.TGJU_SERIES)),
         quality.check_global_freshness(con, date.today()),
         quality.check_usd_inputs_freshness(con, date.today()),
+        quality.check_bill_yields(con, date.today(), unparsed_bills),
         quality.check_fetch_errors(con, run.id),
     ]
     return 1 if quality.save_and_summarize(con, run.id, None, checks) else 0
@@ -498,6 +511,7 @@ def main() -> int:
     p_back.add_argument("--refresh", action="store_true", help="re-download instruments already backfilled")
     sub.add_parser("status")
     sub.add_parser("global", help="re-download the full history of the global gold and free-USD drivers only")
+    sub.add_parser("bills", help="refresh only the treasury bill yields")
     ap.add_argument("--db", default=datastore.DEFAULT_DB_PATH)
     args = ap.parse_args()
 
@@ -511,6 +525,10 @@ def main() -> int:
         if args.cmd == "global":
             run = Run(con, http)
             refresh_global(run, full=True)
+            return 1 if con.execute("SELECT count(*) FROM fetch_log WHERE run_id = ? AND status = 'error'", [run.id]).fetchone()[0] else 0
+        if args.cmd == "bills":
+            run = Run(con, http)
+            refresh_bills(run)
             return 1 if con.execute("SELECT count(*) FROM fetch_log WHERE run_id = ? AND status = 'error'", [run.id]).fetchone()[0] else 0
         if args.cmd == "daily":
             return collect_daily(con, http, args.allow_open, args.force)

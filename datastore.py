@@ -166,6 +166,31 @@ CREATE TABLE IF NOT EXISTS fundamentals_seen (
     PRIMARY KEY (ins_code, seen_on)
 );
 
+-- Treasury bills (see treasury.py), one row per bill per traded day. Kept apart from daily_prices, which
+-- holds the normal-board universe. Rows stay after a bill matures: TSETMC drops matured bills from its list.
+CREATE TABLE IF NOT EXISTS bill_yields (
+    ins_code   VARCHAR,
+    d          DATE,
+    maturity   DATE,
+    days_left  INTEGER,
+    close      DOUBLE,
+    value      DOUBLE,
+    trades     BIGINT,
+    ytm        DOUBLE,    -- annual compounded yield to maturity, actual/365; 0.40 = 40%
+    PRIMARY KEY (ins_code, d)
+);
+
+-- Daily risk-free yield built from bill_yields. Context only, not a signal.
+CREATE TABLE IF NOT EXISTS bill_yield_daily (
+    d            DATE PRIMARY KEY,
+    ytm_median   DOUBLE,    -- median across usable bills
+    ytm_short    DOUBLE,    -- median across usable bills with up to a year left
+    n_bills      INTEGER,
+    n_short      INTEGER,
+    median_days  DOUBLE,    -- median days to maturity: the maturity mix shifts over time
+    value        DOUBLE
+);
+
 -- One row per market date for which an end-of-day snapshot was taken (final = market was closed).
 CREATE TABLE IF NOT EXISTS snapshots (
     d         DATE PRIMARY KEY,
@@ -225,6 +250,7 @@ TABLE_KEYS = {
     "cot_gold": ["report_d"],
     "monthly_macro": ["series", "period_end"],
     "fundamentals_seen": ["ins_code", "seen_on"],
+    "bill_yields": ["ins_code", "d"],
     "backfill_status": ["ins_code", "kind"],
     "snapshots": ["d"],
     "filled_days": ["d", "kind"],

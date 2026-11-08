@@ -1,0 +1,47 @@
+Treasury bill yield and TEDPIX - DESCRIPTION ONLY. Nothing here is tested or confirmed.
+About 3 years, and only bills still alive today: too short for a design/test split.
+
+Face value check: the bill closest to maturity, last traded days
+  اخزا203  2026-11-04    5 days left  close    999,530  ytm    3.5%
+  اخزا203  2026-11-03    6 days left  close    995,040  ytm   35.3%
+  اخزا203  2026-11-02    7 days left  close    999,700  ytm    1.6%
+  اخزا203  2026-11-01    8 days left  close    994,260  ytm   30.0%
+  اخزا203  2026-10-31    9 days left  close    991,550  ytm   41.1%
+
+Coverage by half year (days with at least one usable bill)
+  period     days  bills(median)  maturity days(median)  median ytm  short ytm  days with short
+  2023H2     16              1                   1090       27.2%         -                 0
+  2024H1    114              2                    973       32.2%         -                 0
+  2024H2    124              5                    807       31.1%         -                 0
+  2025H1    111              6                    628       34.0%         -                 0
+  2025H2    126              6                    456       35.2%      36.7%               13
+  2026H1    109              8                    323       39.4%      38.9%              107
+  2026H2     85             11                    518       40.5%      39.5%               83
+
+Window with at least 3 bills: 2024-05-11 .. 2026-11-04 (598 trading days)
+
+Same-period correlation: same-bill yield change vs TEDPIX log return
+  weekly (5 trading days)            n=118  r=-0.06  spearman=-0.04  95% interval -0.23 .. +0.06
+  monthly (20 trading days)          n= 28  r=+0.06  spearman=+0.07  95% interval -0.35 .. +0.24
+  weekly, first half                 n= 59  r=-0.10  spearman=-0.07  95% interval -0.35 .. +0.15
+  weekly, second half                n= 59  r=-0.06  spearman=-0.04  95% interval -0.29 .. +0.11
+  weekly, without top 5% stock moves n=112  r=-0.09  spearman=-0.06  95% interval -0.27 .. +0.05
+
+Lead and lag, weekly (k > 0: yield change k weeks BEFORE the TEDPIX return). Nine looks, so one may stand out by chance.
+  k = -4                             n=114  r=+0.13  spearman=+0.08  95% interval -0.10 .. +0.28
+  k = -3                             n=115  r=+0.07  spearman=+0.10  95% interval -0.13 .. +0.20
+  k = -2                             n=116  r=+0.05  spearman=+0.07  95% interval -0.12 .. +0.17
+  k = -1                             n=117  r=+0.08  spearman=+0.08  95% interval -0.12 .. +0.21
+  k = +0                             n=118  r=-0.06  spearman=-0.04  95% interval -0.23 .. +0.06
+  k = +1                             n=117  r=-0.05  spearman=-0.03  95% interval -0.29 .. +0.11
+  k = +2                             n=116  r=-0.13  spearman=-0.11  95% interval -0.27 .. -0.03
+  k = +3                             n=115  r=+0.06  spearman=+0.04  95% interval -0.05 .. +0.28
+  k = +4                             n=114  r=-0.00  spearman=+0.02  95% interval -0.17 .. +0.16
+
+TEDPIX in the next 20 trading days, by yield change in the previous 20
+  yield change   months  mean yield change  next mean  next median  share up
+  fell most          9              -1.0      +6.3%        +6.7%       67%
+  middle             9              +0.2      +5.8%        +3.5%       56%
+  rose most          9              +1.5      +4.3%        +1.9%       56%
+
+Levels, daily: yield vs log TEDPIX r=+0.89. Both trend, so this does not show a link.
