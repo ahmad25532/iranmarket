@@ -159,6 +159,24 @@ def parse_watch_price(row: Dict[str, Any], d: date) -> Optional[Dict[str, Any]]:
     }
 
 
+def parse_watch_fundamentals(row: Dict[str, Any], seen_at: datetime) -> Optional[Dict[str, Any]]:
+    """
+    eps is a float, 0.0 when TSETMC has no figure; pe is a string such as '6.4', or null or '-'.
+    Rows with neither figure are skipped, so a zero is never stored as if it were real earnings.
+    """
+    eps = _f(row.get("eps"))
+    pe = _f(row.get("pe"))
+    if not eps and pe is None:
+        return None
+    return {
+        "ins_code": str(row.get("insCode")),
+        "seen_on": seen_at.date(),
+        "seen_at": seen_at,
+        "eps": eps,
+        "pe": pe,
+    }
+
+
 # ---------- client types (individual vs institutional) ----------
 
 def fetch_client_types_all(http: HttpClient) -> List[Dict[str, Any]]:
