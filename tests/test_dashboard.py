@@ -16,10 +16,10 @@ D = date(2026, 10, 28)
 def con():
     c = datastore.connect(":memory:")
     datastore.upsert(c, "instruments", [
-        {"ins_code": "g1", "ticker": "عيار", "paper_type": 8},
-        {"ins_code": "g2", "ticker": "زر", "paper_type": 8},
-        {"ins_code": "g3", "ticker": "كوچك", "paper_type": 8},
-        {"ins_code": "s1", "ticker": "فملي", "paper_type": 1},
+        {"ins_code": "g1", "ticker": "عيار"},
+        {"ins_code": "g2", "ticker": "زر"},
+        {"ins_code": "g3", "ticker": "كوچك"},
+        {"ins_code": "s1", "ticker": "فملي"},
     ])
     c.execute("""CREATE TABLE instrument_class AS SELECT ins_code, ticker, ticker AS name,
                  CASE WHEN ins_code = 's1' THEN 'stock' ELSE 'etf_commodity' END AS asset_class FROM instruments""")

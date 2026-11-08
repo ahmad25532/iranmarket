@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS instruments (
     ticker       VARCHAR,
     name         VARCHAR,
     isin         VARCHAR,
-    paper_type   INTEGER,
+    paper_type   INTEGER,   -- no longer written or read: use isin (see sources.FUND_ISIN_PREFIX)
     sector_code  VARCHAR,
     first_seen   DATE,
     last_seen    DATE

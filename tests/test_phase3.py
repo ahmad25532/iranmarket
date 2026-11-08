@@ -79,7 +79,7 @@ def test_exit_cannot_be_filled_on_market_lock_days():
 def test_fixed_income_index_skips_distribution_drops():
     con = datastore.connect(":memory:")
     days = [date(2024, 1, 1) + timedelta(days=i) for i in range(4)]
-    datastore.upsert(con, "instruments", [{"ins_code": "f", "ticker": "ث", "paper_type": 8}])
+    datastore.upsert(con, "instruments", [{"ins_code": "f", "ticker": "ث"}])
     datastore.upsert(con, "fipiran_funds", [{"ins_code": "f", "reg_no": "1", "fund_type": 4}])
     con.execute("CREATE TABLE instrument_class AS SELECT 'f' AS ins_code, 'ث' AS ticker, '' AS name, 'etf_fixed_income' AS asset_class")
     # +0.1% a day, with a 2% payout drop on day 3

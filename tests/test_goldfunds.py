@@ -17,7 +17,7 @@ def make_db(funds):
     """funds: {code: {"nav": callable(i) -> fipiran NAV, "price": callable(i) -> price, "value": float,
                       "tsetmc_nav": optional NAV on the last day}}"""
     con = datastore.connect(":memory:")
-    datastore.upsert(con, "instruments", [{"ins_code": c, "ticker": c, "paper_type": 8} for c in funds])
+    datastore.upsert(con, "instruments", [{"ins_code": c, "ticker": c} for c in funds])
     con.execute("CREATE TABLE instrument_class AS SELECT ins_code, ticker, ticker AS name, 'etf_commodity' AS asset_class FROM instruments")
     con.execute("CREATE TABLE gold_funds AS SELECT ins_code FROM instruments")
     navs, prices, adj = [], [], []
