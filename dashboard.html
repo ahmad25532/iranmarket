@@ -90,7 +90,7 @@ ul.plain li { padding: 3px 0; }
       <h1>دستیار سرمایه‌گذاری بورس و طلا</h1>
       <div class="sub" id="asof">در حال بارگذاری…</div>
     </div>
-    <div id="health-badge"></div>
+    <div style="display:flex;gap:12px;align-items:center"><a href="/" style="color:var(--accent);font-size:14px">نمای ساده</a><div id="health-badge"></div></div>
   </header>
 
   <div id="banner" class="card fail"></div>
@@ -298,6 +298,9 @@ const bigToman = r => {
   if (t >= 1e6) return fa(t / 1e6, 1) + ' میلیون تومان';
   return fa(t) + ' تومان';
 };
+// People type Persian digits and thousands separators; Number() understands neither.
+const latin = t => String(t ?? '').trim().replace(/[۰-۹]/g, c => '۰۱۲۳۴۵۶۷۸۹'.indexOf(c)).replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c))
+  .replace(/[,٬،\s]/g, '').replace(/[٫]/g, '.');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 let charts = {};
 let current = null;
@@ -351,7 +354,7 @@ function renderAlloc(v) {
 
 document.getElementById('route').onclick = async () => {
   const out = document.getElementById('route-out');
-  const toman = Number(document.getElementById('route-amount').value.replace(/,/g, ''));
+  const toman = Number(latin(document.getElementById('route-amount').value));
   if (!toman) { out.textContent = 'مبلغ را به عدد وارد کنید.'; return; }
   try {
     const r = await fetch('/api/route', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({toman})});
@@ -761,7 +764,7 @@ document.getElementById('save').onclick = async () => {
   err.textContent = '';
   const holdings = [...document.querySelectorAll('#holdings .hold-row')].map(r => {
     const [t, q] = r.querySelectorAll('input');
-    return {ticker: t.value.trim(), qty: q.value.trim()};
+    return {ticker: t.value.trim(), qty: latin(q.value)};
   }).filter(h => h.ticker || h.qty);
   for (const h of holdings) {
     if (!h.ticker) { err.textContent = 'برای هر تعداد، نماد را هم وارد کنید.'; return; }
@@ -769,13 +772,13 @@ document.getElementById('save').onclick = async () => {
   }
   const manual = {}, target = {};
   for (const k of ['gold18_grams', 'coin_emami', 'cash_toman', 'usd']) {
-    const v = document.getElementById('m-' + k).value.trim();
+    const v = latin(document.getElementById('m-' + k).value);
     if (v && !(Number(v) >= 0)) { err.textContent = 'مقدار طلا، سکه، نقد و دلار باید عدد باشد.'; return; }
     manual[k] = Number(v || 0);
   }
   let sum = 0;
   for (const k of Object.keys(CLASSES)) {
-    const v = Number(document.getElementById('t-' + k).value || 0);
+    const v = Number(latin(document.getElementById('t-' + k).value) || 0);
     if (!(v >= 0)) { err.textContent = 'درصدهای هدف باید عدد باشند.'; return; }
     target[k] = v; sum += v;
   }

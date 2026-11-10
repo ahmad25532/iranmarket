@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import duckdb
 
+import advisor
 import datastore
 import freeusd
 import globalgold
@@ -193,6 +194,7 @@ def classify(asset_class: str, is_gold: bool) -> str:
 
 def value_portfolio(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any], market: Dict[str, Any]) -> Dict[str, Any]:
     items = []
+    last_market = con.execute("SELECT max(d) FROM daily_prices").fetchall()[0][0]
     for h in pf["holdings"]:
         # Treasury bills are not in daily_prices. A ticker can belong to an old code and a current one,
         # so the row with the latest price wins.
@@ -205,8 +207,10 @@ def value_portfolio(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any], market: 
             items.append({"ticker": h["ticker"], "qty": h["qty"], "error": "قیمت پیدا نشد"})
             continue
         r = r[0]
+        # A holding that stopped trading keeps its last close; it still counts, but the reader is told.
+        stale = bool(last_market and (last_market - r["d"]).days > advisor.STALE_PRICE_DAYS)
         items.append({"ticker": r["ticker"], "name": r["name"], "qty": h["qty"], "price": r["close"], "d": r["d"],
-                      "value": h["qty"] * r["close"], "cls": classify(r["asset_class"], r["is_gold"])})
+                      "value": h["qty"] * r["close"], "cls": classify(r["asset_class"], r["is_gold"]), "stale": stale})
     m = pf["manual"]
     coin = market.get("coin")
     manual_items = [
@@ -343,6 +347,29 @@ def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
     }
 
 
+def simple_state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
+                 live: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Everything the beginner's page shows: one verdict for today, the reasons, and what can be bought."""
+    market = market_snapshot(con, live)
+    valuation = value_portfolio(con, pf, market)
+    data = advisor.data_status(health(con), sources.tehran_today())
+    try:
+        gold_rows = goldfunds.fund_table(con)["rows"]
+    except (duckdb.Error, KeyError, ValueError):
+        gold_rows = []   # the list of funds is a convenience; the verdict does not depend on it
+    return {
+        "generated_at": sources.tehran_now(),
+        "data": data,
+        "plan": advisor.plan(valuation, REBALANCE_BAND_POINTS, data),
+        "portfolio": pf,
+        "items": valuation["items"],
+        "total": valuation["total"],
+        "market": {k: market.get(k) for k in ("usd", "gold18", "coin")},
+        "instruments": advisor.instruments(con, gold_rows),
+        "evidence": advisor.evidence(con),
+    }
+
+
 # ---------------------------------------------------------------- HTTP
 
 def _json_default(o: Any) -> Any:
@@ -356,6 +383,7 @@ def _connect(db_path: str) -> duckdb.DuckDBPyConnection:
 
 
 _last_state: Optional[Dict[str, Any]] = None   # served, marked stale, while the collector locks the database
+_last_simple: Optional[Dict[str, Any]] = None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -395,6 +423,17 @@ class Handler(BaseHTTPRequestHandler):
         _last_state = state(con, load_portfolio(), get_live_prices(), record_today(con, "dashboard", overwrite=False))
         return self._json(200, _last_state)
 
+    def _fresh_simple(self, con):
+        global _last_simple
+        record_today(con, "dashboard", overwrite=False)
+        _last_simple = simple_state(con, load_portfolio(), get_live_prices())
+        return self._json(200, _last_simple)
+
+    def _stale_simple(self):
+        if _last_simple is None:
+            return self._json(503, {"error": "داده‌ها در حال به‌روزرسانی هستند؛ چند دقیقه دیگر صفحه را تازه کنید."})
+        return self._json(200, {**_last_simple, "stale": True})
+
     def _stale_state(self):
         if _last_state is None:
             return self._json(503, {"error": "داده‌ها در حال به‌روزرسانی هستند؛ چند دقیقه دیگر صفحه را تازه کنید."})
@@ -414,11 +453,15 @@ class Handler(BaseHTTPRequestHandler):
         if not self._from_own_page():
             return self._send(403, b"forbidden", "text/plain")
         path = self.path.split("?")[0]
-        if path in ("/", "/index.html"):
-            with open(os.path.join(datastore.BASE_DIR, "dashboard.html"), "rb") as f:
+        # The plain page is the front door; the full dashboard with every table and chart is at /pro.
+        page = {"/": "simple.html", "/index.html": "simple.html", "/pro": "dashboard.html"}.get(path)
+        if page:
+            with open(os.path.join(datastore.BASE_DIR, page), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/api/state":
             return self._with_db(self._fresh_state, on_locked=self._stale_state)
+        if path == "/api/simple":
+            return self._with_db(self._fresh_simple, on_locked=self._stale_simple)
         self._send(404, b"not found", "text/plain")
 
     def do_POST(self):
@@ -429,18 +472,27 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "درخواست نامعتبر"})
         if not self._from_own_page():
             return self._send(403, b"forbidden", "text/plain")
-        if self.path not in ("/api/portfolio", "/api/route", "/api/flows", "/api/flows/delete"):
+        if self.path not in ("/api/portfolio", "/api/route", "/api/split", "/api/flows", "/api/flows/delete"):
             return self._send(404, b"not found", "text/plain")
         try:
             payload = json.loads(body.decode("utf-8") or "{}")
         except (ValueError, UnicodeDecodeError):
             return self._json(400, {"error": "درخواست نامعتبر"})
 
-        if self.path == "/api/route":
+        if self.path in ("/api/route", "/api/split"):
             try:
                 rial = float(payload.get("toman", 0)) * 10
             except (TypeError, ValueError):
                 return self._json(400, {"error": "مبلغ باید عدد باشد"})
+            if not rial == rial or abs(rial) == float("inf"):
+                return self._json(400, {"error": "مبلغ باید عدد باشد"})
+        if self.path == "/api/split":
+            def split(con):
+                v = value_portfolio(con, load_portfolio(), market_snapshot(con, get_live_prices()))
+                return self._json(200, {"steps": advisor.split_new_money(v, rial)})
+            return self._with_db(split)
+
+        if self.path == "/api/route":
 
             def route(con):
                 v = value_portfolio(con, load_portfolio(), market_snapshot(con, get_live_prices()))

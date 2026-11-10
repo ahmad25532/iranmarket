@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>راهنمای ساده سرمایه‌گذاری</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f5f1; --card: #ffffff; --border: #e3e1d9; --text: #1b1b19; --muted: #5f5e58; --faint: #8d8b83;
+  --accent: #2a78d6; --accent-soft: #e7f0fb; --good: #0f7a3d; --good-soft: #e3f4ea; --warn: #8a5800; --warn-soft: #fbf1dc;
+  --bad: #b3261e; --bad-soft: #fbe7e5; --grid: #e7e5de; --track: #eeece6;
+  --c-stocks: #2a78d6; --c-gold: #d99a00; --c-fixed: #1baf7a; --c-cash: #9a988f; --c-other: #b68ad4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #141413; --card: #1c1c1a; --border: #2e2e2b; --text: #f0efec; --muted: #b8b6ad; --faint: #85837b;
+    --accent: #6aa8f0; --accent-soft: #1d2a3b; --good: #4cc27c; --good-soft: #17281e; --warn: #e6a93a; --warn-soft: #2d2513;
+    --bad: #ef7a72; --bad-soft: #2f1a18; --grid: #2a2a27; --track: #2a2a27;
+    --c-stocks: #4a93ea; --c-gold: #d9a520; --c-fixed: #25a878; --c-cash: #7d7b74; --c-other: #9a75b8;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: Vazirmatn, Tahoma, sans-serif; line-height: 1.9; font-size: 16px; }
+main { max-width: 760px; margin: 0 auto; padding: 20px 16px 56px; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+h1 { font-size: 22px; font-weight: 800; }
+h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+h3 { font-size: 15px; font-weight: 700; margin: 14px 0 4px; }
+a { color: var(--accent); }
+.sub { color: var(--muted); font-size: 14px; }
+.small { font-size: 13px; color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+.pill.ok { background: var(--good-soft); color: var(--good); } .pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.stop { background: var(--bad-soft); color: var(--bad); }
+
+#verdict { border-width: 2px; }
+#verdict .eyebrow { font-size: 13px; font-weight: 500; color: var(--muted); }
+#verdict .headline { font-size: 26px; font-weight: 800; line-height: 1.5; margin: 2px 0 10px; text-wrap: balance; }
+#verdict.hold { border-color: var(--good); background: var(--good-soft); } #verdict.hold .headline { color: var(--good); }
+#verdict.invest, #verdict.start { border-color: var(--accent); background: var(--accent-soft); } #verdict.invest .headline, #verdict.start .headline { color: var(--accent); }
+#verdict.rebalance { border-color: var(--warn); background: var(--warn-soft); } #verdict.rebalance .headline { color: var(--warn); }
+#verdict.blocked { border-color: var(--bad); background: var(--bad-soft); } #verdict.blocked .headline { color: var(--bad); }
+ol.steps { list-style: none; counter-reset: s; margin: 0 0 12px; display: grid; gap: 8px; }
+ol.steps li { counter-increment: s; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 17px; font-weight: 700; display: flex; gap: 12px; align-items: center; }
+ol.steps li::before { content: counter(s, persian); flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--text); color: var(--card); display: grid; place-items: center; font-size: 14px; }
+.notes { display: grid; gap: 6px; margin-top: 12px; }
+.notes div { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 14px; }
+
+.mixbar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: var(--track); margin: 6px 0 2px; }
+.mixbar span { display: block; height: 100%; }
+.mixlabel { font-size: 13px; color: var(--muted); margin-top: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; margin-top: 12px; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-left: 6px; vertical-align: -1px; }
+.legend b { font-variant-numeric: tabular-nums; }
+
+table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+th { text-align: right; color: var(--muted); font-weight: 500; font-size: 13px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+td { padding: 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tr.hl td { background: var(--accent-soft); font-weight: 700; }
+.tablewrap { overflow-x: auto; }
+.up { color: var(--good); } .down { color: var(--bad); }
+
+input, select { font-family: inherit; font-size: 16px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); width: 100%; }
+button { font-family: inherit; font-size: 15px; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+button:disabled { opacity: .6; cursor: wait; }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+label { font-size: 14px; color: var(--muted); display: block; margin-bottom: 2px; }
+.fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin: 10px 0; }
+.hold-row { display: grid; grid-template-columns: 1.2fr 1fr 44px; gap: 8px; margin-bottom: 8px; }
+.choices { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); margin: 8px 0; }
+.choices button { text-align: center; line-height: 1.6; padding: 10px 8px; }
+.choices button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.err { color: var(--bad); font-size: 14px; min-height: 1.4em; margin-top: 6px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+.row > div { flex: 1 1 200px; }
+details > summary { cursor: pointer; font-weight: 700; font-size: 18px; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::after { content: "＋"; color: var(--muted); font-weight: 400; }
+details[open] > summary::after { content: "－"; }
+details[open] > summary { margin-bottom: 8px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.tabs button { font-size: 14px; padding: 6px 12px; }
+.tabs button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.buy { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr)); margin-top: 10px; }
+.buy > div { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.buy h3 { margin-top: 0; display: flex; align-items: center; gap: 6px; }
+.buy h3 i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.buy ul { list-style: none; font-size: 14px; }
+.buy li { padding: 5px 0; border-bottom: 1px solid var(--grid); }
+.buy li:last-child { border-bottom: 0; }
+.buy li b { font-size: 16px; }
+ul.rules { list-style: none; display: grid; gap: 10px; }
+ul.rules li { padding-right: 14px; border-right: 3px solid var(--accent); }
+ul.rules b { display: block; }
+#banner { display: none; background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+.ltr { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+@media (max-width: 420px) { .card { padding: 16px; } #verdict .headline { font-size: 22px; } ol.steps li { font-size: 16px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>راهنمای ساده سرمایه‌گذاری</h1>
+    <div class="small"><span id="data-pill"></span> <a href="/pro">نمای پیشرفته</a></div>
+  </header>
+
+  <div id="banner" class="card" role="alert"></div>
+
+  <section id="verdict" class="card start" aria-live="polite">
+    <div class="eyebrow" id="v-date">در حال بارگذاری…</div>
+    <div class="headline" id="v-headline">&nbsp;</div>
+    <ol class="steps" id="v-steps"></ol>
+    <div id="v-why"></div>
+    <div class="notes" id="v-notes"></div>
+  </section>
+
+  <section class="card" id="mix-card" style="display:none">
+    <h2>سبد شما</h2>
+    <div class="sub" id="mix-total"></div>
+    <div class="mixlabel">الان</div>
+    <div class="mixbar" id="mix-now" role="img"></div>
+    <div class="mixlabel">هدف</div>
+    <div class="mixbar" id="mix-target" role="img"></div>
+    <div class="legend" id="mix-legend"></div>
+  </section>
+
+  <section class="card">
+    <h2>پول جدید دارم</h2>
+    <div class="sub">مثلاً پس‌انداز این ماه. مبلغ را بنویسید تا بگویم چطور تقسیمش کنید که سبد به هدف نزدیک شود.</div>
+    <div class="row" style="margin-top:10px">
+      <div><label for="new-amount">مبلغ به تومان</label><input id="new-amount" inputmode="numeric" dir="ltr" autocomplete="off" placeholder="10,000,000"></div>
+      <button type="button" class="primary" id="new-go">تقسیم کن</button>
+    </div>
+    <div class="small" id="new-echo"></div>
+    <ol class="steps" id="new-out" style="margin-top:10px"></ol>
+    <div class="small" id="new-note"></div>
+  </section>
+
+  <section class="card">
+    <h2>دقیقاً چه چیزی بخرم؟</h2>
+    <div class="sub">این‌ها پرمعامله‌ترین صندوق‌های هر دسته در ۳۰ روز گذشته‌اند. ترتیب بر اساس حجم معامله است، نه «بهتر بودن»: در آزمون‌ها هیچ روشی برای انتخاب صندوقِ بهتر تأیید نشد، پس ملاک فقط این است که راحت خرید و فروش شود. یکی از هر دسته کافی است.</div>
+    <div class="buy" id="buy"></div>
+    <div class="small" style="margin-top:10px">صندوق‌های «اهرمی» و «بخشی» را با صندوق سهامی معمولی اشتباه نگیرید؛ آن‌ها رفتار کل بازار را ندارند و در آزمون‌ها نبودند. قیمت هر واحد، قیمت پایانی آخرین روز معاملاتی است.</div>
+    <details style="margin-top:14px">
+      <summary style="font-size:15px">تا حالا از بورس چیزی نخریده‌ام</summary>
+      <ol style="padding-right:20px;font-size:15px">
+        <li>در سامانه سجام ثبت‌نام و احراز هویت کنید تا کد بورسی بگیرید.</li>
+        <li>در یک کارگزاری حساب باز کنید و اپ معاملاتش را نصب کنید.</li>
+        <li>پول را به حساب کارگزاری واریز کنید.</li>
+        <li>در اپ، نام نماد را (مثلاً یکی از نمادهای بالا) جست‌وجو کنید و به اندازه مبلغی که این صفحه گفته «خرید» بزنید.</li>
+        <li>بعد از خرید، تعداد واحدها را در بخش «دارایی من» همین صفحه وارد کنید.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="card">
+    <details id="assets">
+      <summary>دارایی من</summary>
+      <div class="sub">هر چه دارید را وارد کنید. این اطلاعات فقط روی همین کامپیوتر ذخیره می‌شود.</div>
+      <div class="fields">
+        <div><label for="m-cash_toman">پول نقد آماده سرمایه‌گذاری (تومان)</label><input id="m-cash_toman" inputmode="numeric" dir="ltr" autocomplete="off"></div>
+        <div><label for="m-gold18_grams">طلای ۱۸ عیار (گرم)</label><input id="m-gold18_grams" inputmode="decimal" dir="ltr" autocomplete="off"></div>
+        <div><label for="m-coin_emami">سکه امامی (تعداد)</label><input id="m-coin_emami" inputmode="decimal" dir="ltr" autocomplete="off"></div>
+        <div><label for="m-usd">دلار اسکناس (تعداد)</label><input id="m-usd" inputmode="decimal" dir="ltr" autocomplete="off"></div>
+      </div>
+      <h3>صندوق‌ها و سهم‌های بورسی</h3>
+      <div class="small">نماد را همان‌طور که در اپ کارگزاری می‌بینید بنویسید، با تعداد واحد یا سهم.</div>
+      <div id="holdings" style="margin-top:8px"></div>
+      <button type="button" id="add-row">+ افزودن نماد</button>
+      <datalist id="tickers"></datalist>
+
+      <h3 style="margin-top:20px">چه مقدار از این پول را ممکن است تا یک سال آینده لازم داشته باشید؟</h3>
+      <div class="small">آن بخش در صندوق درآمد ثابت می‌ماند که نوسان کمی دارد. بقیه، نصف سهام و نصف طلا می‌شود. سهام و طلا در گذشته افت‌های چندده‌درصدی داشته‌اند که برگشتنش سال‌ها طول کشیده است.</div>
+      <div class="choices" id="horizon">
+        <button type="button" data-fixed="0" aria-pressed="false">هیچ<br><span class="small">۵۰٪ سهام، ۵۰٪ طلا</span></button>
+        <button type="button" data-fixed="10" aria-pressed="false">حدود یک‌دهم<br><span class="small">۴۵ / ۴۵ / ۱۰</span></button>
+        <button type="button" data-fixed="25" aria-pressed="false">حدود یک‌چهارم<br><span class="small">۳۷٫۵ / ۳۷٫۵ / ۲۵</span></button>
+        <button type="button" data-fixed="50" aria-pressed="false">حدود نصف<br><span class="small">۲۵ / ۲۵ / ۵۰</span></button>
+      </div>
+      <div class="small" id="custom-target"></div>
+      <div style="margin-top:14px"><button type="button" class="primary" id="save">ذخیره و محاسبه</button></div>
+      <div class="err" id="save-err" role="alert"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <details id="why">
+      <summary>چرا نصف سهام و نصف طلا؟</summary>
+      <div class="sub">اگر ۱۰۰ میلیون تومان را یک بار می‌خریدید و دست نمی‌زدید، این می‌شد. «قدرت خرید» یعنی بعد از حساب کردن گرانی (با دلار آزاد): زیر ۱۰۰ یعنی با وجود بیشتر شدن عدد تومانی، در واقع فقیرتر شده‌اید.</div>
+      <div class="tabs" id="ev-tabs"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>اگر می‌خریدید</th><th>به تومان می‌شد</th><th>قدرت خرید امروز</th><th>بدترین افت در مسیر</th></tr></thead>
+          <tbody id="ev-body"></tbody>
+        </table>
+      </div>
+      <div class="small" id="ev-note" style="margin-top:8px"></div>
+      <h3>از این عددها چه می‌فهمیم</h3>
+      <ul class="rules" style="margin-top:6px">
+        <li><b>هیچ‌کس از قبل نمی‌دانست کدام برنده می‌شود.</b> در دوره اول سهام جلوتر بود و در دوره دوم طلا. ترکیب نصف‌نصف تنها چیزی بود که در هر دو دوره قدرت خرید را بیشتر کرد و افتش حدود نصف سهام بود.</li>
+        <li><b>طلا در این سال‌ها بهتر از ترکیب بود، ولی این تضمین آینده نیست.</b> کسی که همه را طلا بخرد روی تکرار همین گذشته شرط بسته است.</li>
+        <li><b>صندوق درآمد ثابت قدرت خرید را حفظ نکرد.</b> برای پولی که زود لازم دارید خوب است، نه برای پس‌انداز چندساله.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>پنج قانون، همه از آزمون روی داده واقعی</summary>
+      <ul class="rules">
+        <li><b>۱. دنبال «زمان مناسب» نگردید.</b> بیش از بیست روش زمان‌بندی (روند، جریان پول حقیقی، حباب طلا، نرخ دلار، انس جهانی) آزمون شد و هیچ‌کدام روی داده‌ای که از قبل ندیده بود جواب نداد.</li>
+        <li><b>۲. تک‌سهم انتخاب نکنید.</b> ده روش انتخاب سهم آزمون شد و هیچ‌کدام از خریدن کل بازار بهتر نبود. کارمزد و صف‌ها بیشترِ بازده را خوردند.</li>
+        <li><b>۳. کم معامله کنید.</b> فقط وقتی یک بخش سبد ۲۰ واحد از هدف دور شد آن را برگردانید. این صفحه همان روز به شما می‌گوید.</li>
+        <li><b>۴. به سیگنال خروج تکیه نکنید.</b> در ریزش‌ها بازار در صف فروش قفل می‌شود و نمی‌شود فروخت. محافظت باید از قبل در خودِ ترکیب سبد باشد.</li>
+        <li><b>۵. پولی که زود لازم دارید را وارد سهام و طلا نکنید.</b> <span id="rule-fall"></span></li>
+      </ul>
+      <div class="small" style="margin-top:12px">آنچه آزمون <b>نشده</b>: تحلیل بنیادی شرکت‌ها و اخبار. این راهنما درباره آن‌ها ساکت است، نه مخالف.</div>
+    </details>
+  </section>
+
+  <p class="small">این صفحه نتیجه آزمون داده‌های گذشته را به زبان ساده می‌گوید. گذشته تکرار آینده را تضمین نمی‌کند، سود تضمین‌شده‌ای وجود ندارد و این ابزار مشاور دارای مجوز نیست و شرایط شخصی شما (بدهی، درآمد، نیازهای فوری) را نمی‌داند. تصمیم و مسئولیت با خود شماست.</p>
+</main>
+
+<script>
+const COLORS = {stocks: 'var(--c-stocks)', gold: 'var(--c-gold)', fixed: 'var(--c-fixed)', cash: 'var(--c-cash)', other: 'var(--c-other)'};
+const SHORT = {stocks: 'سهام', gold: 'طلا', fixed: 'درآمد ثابت', cash: 'نقد', other: 'سایر'};
+const EV_LABELS = {mix: 'نصف سهام، نصف طلا', stocks: 'فقط سهام (شاخص کل)', gold: 'فقط طلا', fixed: 'صندوق درآمد ثابت', usd: 'دلار در خانه'};
+const EV_TABS = {whole: 'کل دوره', first: 'دوره اول', second: 'دوره دوم'};
+const fa = (n, d = 0) => Number(n).toLocaleString('fa-IR', {maximumFractionDigits: d, minimumFractionDigits: d});
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+// The exchange stores names with Arabic letters; show them the way people type them.
+const tick = s => String(s ?? '').replace(/ي/g, 'ی').replace(/ك/g, 'ک');
+const jdate = (iso, opt = {year: 'numeric', month: 'long', day: 'numeric'}) =>
+  iso ? new Date(String(iso).slice(0, 10) + 'T12:00:00').toLocaleDateString('fa-IR-u-ca-persian', opt) : '';
+// People type Persian digits and thousands separators; Number() understands neither.
+function num(text) {
+  const t = String(text ?? '').trim()
+    .replace(/[۰-۹]/g, c => '۰۱۲۳۴۵۶۷۸۹'.indexOf(c)).replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c))
+    .replace(/[,٬،\s]/g, '').replace(/[٫]/g, '.');
+  return t === '' ? 0 : Number(t);
+}
+function bigToman(rial) {
+  const t = rial / 10;
+  if (t >= 1e9) return fa(t / 1e9, 2) + ' میلیارد تومان';
+  if (t >= 1e6) return fa(t / 1e6, t >= 1e8 ? 0 : 1) + ' میلیون تومان';
+  return fa(t) + ' تومان';
+}
+let state = null, fixedChoice = null, evTab = 'whole';
+
+function renderVerdict(s) {
+  const p = s.plan, v = document.getElementById('verdict');
+  v.className = 'card ' + p.status;
+  document.getElementById('v-date').textContent = 'امروز، ' + jdate(s.generated_at, {weekday: 'long', day: 'numeric', month: 'long'});
+  document.getElementById('v-headline').textContent = p.headline;
+  document.getElementById('v-steps').innerHTML = p.steps.map(x => `<li>${esc(x.text)}</li>`).join('');
+  document.getElementById('v-why').textContent = p.why;
+  document.getElementById('v-notes').innerHTML = p.warnings.map(w => `<div>${esc(tick(w))}</div>`).join('');
+  const pill = document.getElementById('data-pill');
+  pill.className = 'pill ' + s.data.level;
+  pill.textContent = s.data.level === 'ok' ? 'داده‌ها تا ' + jdate(s.data.last_market_date, {day: 'numeric', month: 'long'}) : s.data.text.split('.')[0];
+  pill.title = s.data.text;
+}
+
+function bar(id, shares, field) {
+  const el = document.getElementById(id);
+  el.innerHTML = shares.filter(x => x[field] > 0).map(x => `<span style="width:${x[field]}%;background:${COLORS[x.key]}"></span>`).join('');
+  el.setAttribute('aria-label', shares.map(x => `${SHORT[x.key]} ${fa(x[field])} درصد`).join('، '));
+}
+
+function renderMix(s) {
+  const p = s.plan, card = document.getElementById('mix-card');
+  card.style.display = p.base > 0 ? '' : 'none';
+  if (!(p.base > 0)) return;
+  document.getElementById('mix-total').textContent = 'ارزش امروز: ' + bigToman(p.base) + (p.outside > 0 ? ' (بدون ' + bigToman(p.outside) + ' دارایی دیگر)' : '');
+  bar('mix-now', p.shares, 'current_pct');
+  bar('mix-target', p.shares, 'target_pct');
+  document.getElementById('mix-legend').innerHTML = p.shares.map(x =>
+    `<span><i style="background:${COLORS[x.key]}"></i>${SHORT[x.key]}: <b>${fa(x.current_pct)}٪</b> <span class="small">(هدف ${fa(x.target_pct)}٪)</span></span>`).join('');
+}
+
+function renderBuy(s) {
+  const i = s.instruments;
+  const list = rows => rows.length ? '<ul>' + rows.map(r =>
+    `<li><b>${esc(tick(r.ticker))}</b><br><span class="small">${esc(tick(r.name))}<br>هر واحد حدود ${fa(r.price / 10)} تومان</span></li>`).join('') + '</ul>'
+    : '<div class="small">فهرستی در داده‌ها نیست.</div>';
+  const stocks = i.stocks_index.concat(i.stocks_equity);
+  document.getElementById('buy').innerHTML =
+    `<div><h3><i style="background:${COLORS.stocks}"></i>برای بخش سهام</h3><div class="small">صندوق شاخصی یا سهامی: یک‌جا کل بازار را می‌خرد.</div>${list(stocks)}</div>` +
+    `<div><h3><i style="background:${COLORS.gold}"></i>برای بخش طلا</h3><div class="small">صندوق طلا: مثل طلاست، بدون اجرت و نگهداری.</div>${list(i.gold)}</div>` +
+    `<div><h3><i style="background:${COLORS.fixed}"></i>برای پول کوتاه‌مدت</h3><div class="small">صندوق درآمد ثابت: سود روزشمار، نوسان کم.</div>${list(i.fixed)}</div>`;
+  const all = stocks.concat(i.gold, i.fixed).map(r => tick(r.ticker));
+  document.getElementById('tickers').innerHTML = [...new Set(all)].map(t => `<option value="${esc(t)}">`).join('');
+}
+
+function renderEvidence(s) {
+  const tabs = document.getElementById('ev-tabs');
+  const have = s.evidence.map(e => e.key);
+  if (!have.includes(evTab)) evTab = have[0];
+  tabs.innerHTML = Object.keys(EV_TABS).filter(k => have.includes(k)).map(k =>
+    `<button type="button" data-k="${k}" aria-pressed="${k === evTab}">${EV_TABS[k]}</button>`).join('');
+  tabs.querySelectorAll('button').forEach(b => b.onclick = () => { evTab = b.dataset.k; renderEvidence(state); });
+  const e = s.evidence.find(x => x.key === evTab);
+  const body = document.getElementById('ev-body'), note = document.getElementById('ev-note');
+  if (!e) { body.innerHTML = '<tr><td colspan="4">داده کافی نیست.</td></tr>'; note.textContent = ''; return; }
+  const my = {year: 'numeric', month: 'long'};
+  body.innerHTML = e.rows.map(r => {
+    const real = r.real_multiple * 100;
+    return `<tr class="${r.key === 'mix' ? 'hl' : ''}"><td>${EV_LABELS[r.key]}</td>
+      <td>${bigToman(r.rial_multiple * 1e9)}</td>
+      <td class="${real >= 100 ? 'up' : 'down'}">معادل ${fa(real)} میلیون</td>
+      <td>${r.worst_fall < -0.005 ? fa(-r.worst_fall * 100) + '٪ ریزش' : 'ندارد'}</td></tr>`;
+  }).join('');
+  note.textContent = `از ${jdate(e.start, my)} تا ${jdate(e.end, my)} (${fa(e.years, 1)} سال). بدون کارمزد؛ یک بار خرید کمتر از یک درصد هزینه دارد. ` +
+    'سهام یعنی شاخص کل با سود نقدی که خودش قابل خرید نیست؛ صندوق‌های شاخصی در دوره دوم نزدیک به آن حرکت کردند. «بدترین افت» بیشترین ریزش قدرت خرید از یک قله تا کف بعدی است.';
+  const whole = s.evidence.find(x => x.key === 'whole') || e;
+  const fall = k => fa(-whole.rows.find(r => r.key === k).worst_fall * 100);
+  document.getElementById('rule-fall').textContent =
+    `در همین سال‌ها قدرت خرید سهام یک بار ${fall('stocks')}٪، طلا ${fall('gold')}٪ و ترکیب نصف‌نصف ${fall('mix')}٪ ریخت و برگشتنش طول کشید.`;
+}
+
+function holdingRow(t = '', q = '') {
+  const div = document.createElement('div');
+  div.className = 'hold-row';
+  div.innerHTML = `<input list="tickers" placeholder="نماد" aria-label="نماد" autocomplete="off" value="${esc(tick(t))}">
+    <input placeholder="تعداد" aria-label="تعداد" inputmode="decimal" dir="ltr" autocomplete="off" value="${esc(q)}">
+    <button type="button" aria-label="حذف این ردیف">×</button>`;
+  div.querySelector('button').onclick = () => div.remove();
+  document.getElementById('holdings').appendChild(div);
+}
+
+function renderForm(s) {
+  const pf = s.portfolio;
+  for (const k of ['cash_toman', 'gold18_grams', 'coin_emami', 'usd']) {
+    const v = pf.manual[k];
+    document.getElementById('m-' + k).value = v ? (k === 'cash_toman' ? Number(v).toLocaleString('en-US') : v) : '';
+  }
+  document.getElementById('holdings').innerHTML = '';
+  pf.holdings.forEach(h => holdingRow(h.ticker, h.qty));
+  if (!pf.holdings.length) holdingRow();
+  const t = pf.target;
+  const simple = !t.other && !t.cash && Math.abs(t.stocks - t.gold) < 0.01 && [0, 10, 25, 50].includes(Math.round(t.fixed));
+  fixedChoice = simple ? Math.round(t.fixed) : null;
+  document.querySelectorAll('#horizon button').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.fixed) === fixedChoice)));
+  document.getElementById('custom-target').textContent = simple ? '' :
+    `هدف فعلی شما در نمای پیشرفته تنظیم شده است (سهام ${fa(t.stocks)}٪، طلا ${fa(t.gold)}٪، درآمد ثابت ${fa(t.fixed)}٪، سایر ${fa(t.other)}٪، نقد ${fa(t.cash)}٪). اگر یکی از گزینه‌های بالا را بزنید جایگزین می‌شود.`;
+  if (!(s.total > 0)) document.getElementById('assets').open = true;
+}
+
+function render(s) {
+  state = s;
+  const banner = document.getElementById('banner');
+  banner.textContent = s.stale ? 'داده‌ها همین حالا در حال به‌روزرسانی هستند. این صفحه آخرین نسخه قبلی را نشان می‌دهد و ذخیره فعلاً ممکن نیست؛ چند دقیقه دیگر صفحه را تازه کنید.' : '';
+  banner.style.display = s.stale ? 'block' : 'none';
+  renderVerdict(s); renderMix(s); renderBuy(s); renderEvidence(s);
+}
+
+async function load(withForm = true) {
+  try {
+    const r = await fetch('/api/simple');
+    const s = await r.json();
+    if (!r.ok) throw new Error(s.error || 'خطا در خواندن داده‌ها');
+    render(s);
+    if (withForm) renderForm(s);
+  } catch (e) {
+    const b = document.getElementById('banner');
+    b.textContent = e.message === 'Failed to fetch' ? 'برنامه در حال اجرا نیست. فایل run_dashboard.bat را اجرا کنید و صفحه را تازه کنید.' : e.message;
+    b.style.display = 'block';
+    document.getElementById('v-date').textContent = '';
+  }
+}
+
+document.querySelectorAll('#horizon button').forEach(b => b.onclick = () => {
+  fixedChoice = Number(b.dataset.fixed);
+  document.querySelectorAll('#horizon button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.getElementById('custom-target').textContent = '';
+});
+document.getElementById('add-row').onclick = () => holdingRow();
+
+document.getElementById('save').onclick = async () => {
+  const err = document.getElementById('save-err');
+  err.textContent = '';
+  const holdings = [];
+  for (const row of document.querySelectorAll('#holdings .hold-row')) {
+    const [t, q] = row.querySelectorAll('input');
+    const ticker = t.value.trim(), qty = num(q.value);
+    if (!ticker && !q.value.trim()) continue;
+    if (!ticker) { err.textContent = 'برای هر تعداد، نماد را هم بنویسید.'; t.focus(); return; }
+    if (!(qty > 0)) { err.textContent = `تعداد «${ticker}» باید عددی بزرگ‌تر از صفر باشد.`; q.focus(); return; }
+    holdings.push({ticker, qty});
+  }
+  const manual = {};
+  for (const k of ['cash_toman', 'gold18_grams', 'coin_emami', 'usd']) {
+    const el = document.getElementById('m-' + k), v = num(el.value);
+    if (!(v >= 0)) { err.textContent = 'این خانه باید فقط عدد باشد.'; el.focus(); return; }
+    manual[k] = v;
+  }
+  const target = fixedChoice === null ? state.portfolio.target
+    : {stocks: (100 - fixedChoice) / 2, gold: (100 - fixedChoice) / 2, fixed: fixedChoice, other: 0, cash: 0};
+  const btn = document.getElementById('save');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/portfolio', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holdings, manual, target})});
+    const s = await r.json();
+    if (!r.ok) { err.textContent = s.error || 'ذخیره نشد.'; return; }
+    await load();
+    document.getElementById('assets').open = false;
+    document.getElementById('verdict').scrollIntoView({behavior: 'smooth', block: 'start'});
+  } catch (e) {
+    err.textContent = 'ارتباط با برنامه برقرار نشد.';
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+const amount = document.getElementById('new-amount');
+amount.oninput = () => {
+  const v = num(amount.value);
+  document.getElementById('new-echo').textContent = v > 0 ? 'یعنی ' + bigToman(v * 10) : '';
+};
+async function split() {
+  const out = document.getElementById('new-out'), note = document.getElementById('new-note');
+  const toman = num(amount.value);
+  out.innerHTML = '';
+  if (!(toman > 0)) { note.textContent = 'مبلغ را به عدد بنویسید، مثلاً ۱۰۰۰۰۰۰۰ برای ده میلیون تومان.'; return; }
+  try {
+    const r = await fetch('/api/split', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({toman})});
+    const s = await r.json();
+    if (!r.ok) throw new Error(s.error || 'خطا');
+    out.innerHTML = s.steps.map(x => `<li>${esc(x.text)}</li>`).join('');
+    note.textContent = s.steps.length ? 'بعد از خرید، تعداد واحدهای جدید را در «دارایی من» به‌روز کنید.'
+      : 'سبد شما از هدف جلوتر است و بخشی نیست که کم داشته باشد؛ این پول را نقد نگه دارید یا در «دارایی من» به پول نقد اضافه کنید.';
+  } catch (e) {
+    note.textContent = e.message === 'Failed to fetch' ? 'ارتباط با برنامه برقرار نشد.' : e.message;
+  }
+}
+document.getElementById('new-go').onclick = split;
+amount.onkeydown = e => { if (e.key === 'Enter') split(); };
+
+load();
+</script>
+</body>
+</html>
