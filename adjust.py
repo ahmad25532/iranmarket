@@ -62,12 +62,14 @@ FROM c
 """
 
 # TSETMC's paper types are unusable (see sources.PAPER_TYPES), so shares are recognised by ISIN: IRO1
-# (Bourse), IRO3 (Fara Bourse), IRO7 (base market). Options and futures use other IRO prefixes.
+# (Bourse), IRO3 (Fara Bourse), IRO5 and IRO7 (base market). Options and futures use other IRO prefixes.
+# IRB is bonds and treasury bills: fixed income for the portfolio split, and the closest fee class.
 CLASS_SQL = """
 CREATE OR REPLACE TABLE instrument_class AS
 SELECT i.ins_code, i.ticker, i.name,
     CASE
-        WHEN i.isin LIKE 'IRO1%' OR i.isin LIKE 'IRO3%' OR i.isin LIKE 'IRO7%' THEN 'stock'
+        WHEN i.isin LIKE 'IRO1%' OR i.isin LIKE 'IRO3%' OR i.isin LIKE 'IRO5%' OR i.isin LIKE 'IRO7%' THEN 'stock'
+        WHEN i.isin LIKE 'IRB%' THEN 'etf_fixed_income'
         WHEN f.fund_type = 4 THEN 'etf_fixed_income'
         WHEN f.fund_type = 5 THEN 'etf_commodity'
         ELSE 'etf_equity'

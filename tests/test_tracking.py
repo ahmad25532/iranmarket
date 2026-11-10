@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import dashboard  # noqa: E402
 import datastore  # noqa: E402
+import sources
 import tracking  # noqa: E402
 
 TODAY = date(2026, 11, 7)
@@ -394,7 +395,7 @@ def test_http_opening_records_saving_replaces_and_flows_round_trip(server):
     assert s["tracking"]["record_status"] == "recorded" and s["tracking"]["records"] == 1
     assert call(server + "/api/state")["tracking"]["record_status"] == "exists"
 
-    s = call(server + "/api/flows", {"d": date.today().isoformat(), "kind": "deposit", "amount_toman": "1000"})
+    s = call(server + "/api/flows", {"d": sources.tehran_today().isoformat(), "kind": "deposit", "amount_toman": "1000"})
     entry = s["tracking"]["flows"][0]
     assert entry["amount_toman"] == 1000
     s = call(server + "/api/flows/delete", {"id": entry["id"]})

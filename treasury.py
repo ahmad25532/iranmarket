@@ -122,7 +122,7 @@ def refresh(run: Any, before: Optional[date] = None) -> Dict[str, int]:
     Fetches each live bill's whole list (one short request per bill, so a missed week needs no catch-up
     logic) and rebuilds the daily series. Rows of bills that have matured are kept.
     """
-    bills, unparsed = listed_bills(run.con, date.today())
+    bills, unparsed = listed_bills(run.con, sources.tehran_today())
     fetched = run.fetch_many("bill_history", [
         (code, lambda code=code: sources.fetch_price_history(run.http, code, 0)) for code, _ in bills
     ])

@@ -6,7 +6,7 @@ into one storage row and are covered by tests.
 """
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from net import HttpClient
@@ -33,6 +33,22 @@ TGJU_SERIES = {
     "coin_emami_irr": "sekee",
     "gold_ounce_usd": "ons",
 }
+
+
+# ---------- clock ----------
+
+# Market dates and the settle hour are Tehran's, whatever zone Windows is set to. Iran has had no
+# daylight saving since 2022, so a fixed offset is right and needs no time zone database on Windows.
+TEHRAN = timezone(timedelta(hours=3, minutes=30))
+
+
+def tehran_now() -> datetime:
+    """Current Tehran wall-clock time, naive like every timestamp stored in the database."""
+    return datetime.now(TEHRAN).replace(tzinfo=None)
+
+
+def tehran_today() -> date:
+    return tehran_now().date()
 
 
 # ---------- helpers ----------
@@ -174,6 +190,30 @@ def parse_watch_fundamentals(row: Dict[str, Any], seen_at: datetime) -> Optional
         "seen_at": seen_at,
         "eps": eps,
         "pe": pe,
+    }
+
+
+# ---------- full instrument list (includes what the market watch no longer shows) ----------
+
+def fetch_official_instruments(http: HttpClient) -> List[List[str]]:
+    """Every instrument TSETMC knows: ';' between records, ',' between fields. a=0 asks for the whole list."""
+    text = http.get_text("service.tsetmc.com", "/tsev2/data/TseClient2.aspx?t=Instrument&a=0", timeout=60)
+    records = [r.split(",") for r in text.split(";") if r.count(",") >= 10]
+    if not records:
+        raise ValueError("empty official instrument list")
+    return records
+
+
+def parse_official_share(rec: List[str]) -> Optional[Dict[str, Any]]:
+    """Fields: 0 insCode, 1 ISIN, 5 ticker, 6 name, 8 last update, 15 sector. None unless an ordinary share."""
+    isin = rec[1]
+    if isin[:4] not in ("IRO1", "IRO3") or not isin.endswith("0001"):
+        return None
+    d = parse_deven(rec[8])
+    return {
+        "ins_code": rec[0], "ticker": rec[5].strip(), "name": rec[6].strip(), "isin": isin,
+        "sector_code": rec[15].strip() or None if len(rec) > 15 else None,
+        "first_seen": d, "last_seen": d,
     }
 
 

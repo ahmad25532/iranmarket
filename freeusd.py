@@ -199,7 +199,7 @@ def refresh(run: Any, full: bool) -> Dict[str, int]:
     import datastore
     con, http = run.con, run.http
     counts: Dict[str, int] = {}
-    today = date.today()
+    today = sources.tehran_today()
     have_daily = dict(con.execute("""SELECT series, max(d) FROM macro_daily
                                      WHERE series IN ('usd_nima_irr', 'usd_sana_irr') GROUP BY series""").fetchall())
     have_monthly = dict(con.execute("SELECT series, max(period_end) FROM monthly_macro GROUP BY series").fetchall())

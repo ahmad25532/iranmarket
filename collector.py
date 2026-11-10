@@ -8,6 +8,7 @@ Usage:
     python collector.py backfill           # full history for every listed stock/ETF + NAV + indices + TGJU
     python collector.py backfill --limit 20
     python collector.py bills              # treasury bill yields only
+    python collector.py past-shares        # one-off: delisted shares and their history
     python collector.py status             # what is stored so far and the last 10 trading days' coverage
 
 `daily` is idempotent: when the computer was off for a day or a whole trip, the next run
@@ -39,6 +40,8 @@ BATCH = 40
 TEDPIX = "32097828799138957"
 CATCHUP_LOOKBACK_DAYS = 120
 SETTLE_HOUR = 14  # local (Tehran) hour after which the day's snapshot is considered final
+# A day is marked as filled only if at most this share of instruments failed; otherwise the next run retries.
+MAX_FAILED_SHARE = 0.02
 
 
 class Run:
@@ -47,7 +50,7 @@ class Run:
     def __init__(self, con: duckdb.DuckDBPyConnection, http: HttpClient):
         self.con = con
         self.http = http
-        self.id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.id = sources.tehran_now().strftime("%Y%m%d-%H%M%S")
 
     def fetch(self, source: str, target: str, fn: Callable[[], Any]) -> Optional[Any]:
         t0 = time.monotonic()
@@ -132,7 +135,7 @@ def take_snapshot(run: Run, d: date, final: bool) -> Tuple[Dict[str, Dict[str, A
     rows = run.fetch("market_watch", "all", lambda: sources.fetch_market_watch(http)) or []
     if rows:
         _upsert_instruments(con, [sources.parse_watch_instrument(r, d) for r in rows])
-        store_fundamentals(con, rows, datetime.now())
+        store_fundamentals(con, rows, sources.tehran_now())
     for r in rows:
         # Block-trade boards and rights issues are kept as instruments but carry no usable prices.
         if not sources.is_normal_board(str(r.get("lva") or "")):
@@ -176,30 +179,36 @@ def take_snapshot(run: Run, d: date, final: bool) -> Tuple[Dict[str, Dict[str, A
         print(f"  sector indices: {datastore.upsert(con, 'index_daily', rows)}")
 
     # With a single market-watch request, a failure leaves the day without prices: never call that final.
-    datastore.upsert(con, "snapshots", [{"d": d, "taken_at": datetime.now(), "final": final and bool(rows)}])
+    datastore.upsert(con, "snapshots", [{"d": d, "taken_at": sources.tehran_now(), "final": final and bool(rows)}])
     return prices_today, len(etf_codes)
 
 
-def fill_prices_and_flows(run: Run, codes: List[str], days: int, label: str) -> None:
-    """Official daily price list (last `days` trading days, 0 = all) + full client-flow history."""
+def fill_prices_and_flows(run: Run, codes: List[str], days: int, label: str) -> float:
+    """
+    Official daily price list (last `days` trading days, 0 = all) + full client-flow history.
+    Returns the share of instruments whose prices or flows could not be fetched.
+    """
     con, http = run.con, run.http
+    failed = 0
     for i in range(0, len(codes), BATCH):
         chunk = codes[i:i + BATCH]
         prices = run.fetch_many("price_history", [(c, lambda c=c: sources.fetch_price_history(http, c, days)) for c in chunk])
         flows = run.fetch_many("flow_history", [(c, lambda c=c: sources.fetch_client_type_history(http, c)) for c in chunk])
+        failed += sum(c not in prices or c not in flows for c in chunk)
         status = []
         for code, raw in prices.items():
             rows = [r for r in map(sources.parse_price_history, raw) if r]
             datastore.upsert(con, "daily_prices", rows)
             if days == 0:
-                status.append({"ins_code": code, "kind": "prices", "rows": len(rows), "completed_at": datetime.now()})
+                status.append({"ins_code": code, "kind": "prices", "rows": len(rows), "completed_at": sources.tehran_now()})
         for code, raw in flows.items():
             rows = [r for r in map(sources.parse_ct_history, raw) if r]
             datastore.upsert(con, "client_flows", rows)
             if days == 0:
-                status.append({"ins_code": code, "kind": "flows", "rows": len(rows), "completed_at": datetime.now()})
+                status.append({"ins_code": code, "kind": "flows", "rows": len(rows), "completed_at": sources.tehran_now()})
         datastore.upsert(con, "backfill_status", status)
         print(f"  {label}: {min(i + BATCH, len(codes))}/{len(codes)} instruments")
+    return failed / len(codes) if codes else 0.0
 
 
 def refresh_fipiran_funds(run: Run) -> Dict[str, str]:
@@ -213,25 +222,29 @@ def refresh_fipiran_funds(run: Run) -> Dict[str, str]:
     return dict(run.con.execute("SELECT ins_code, reg_no FROM fipiran_funds").fetchall())
 
 
-def fill_nav(run: Run, codes: List[str], show_all: bool) -> int:
-    """Fills ETF NAV from Fipiran's end-of-day history without overwriting TSETMC snapshot rows."""
+def fill_nav(run: Run, codes: List[str], show_all: bool) -> float:
+    """
+    Fills ETF NAV from Fipiran's end-of-day history without overwriting TSETMC snapshot rows.
+    Returns the share of matched funds whose history could not be fetched.
+    """
     mapping = refresh_fipiran_funds(run)
     targets = [(c, mapping[c]) for c in codes if c in mapping]
-    added = 0
+    added, failed = 0, 0
     for i in range(0, len(targets), BATCH):
         chunk = targets[i:i + BATCH]
         hist = run.fetch_many("fipiran_nav", [
             (code, lambda reg=reg: sources.fetch_fipiran_nav_history(run.http, reg, show_all)) for code, reg in chunk
         ])
+        failed += len(chunk) - len(hist)
         status = []
         for code, raw in hist.items():
             rows = [r for r in (sources.parse_fipiran_nav(x, code) for x in raw) if r]
             added += datastore.upsert(run.con, "etf_nav", rows, keep_existing=True)
             if show_all:
-                status.append({"ins_code": code, "kind": "nav", "rows": len(rows), "completed_at": datetime.now()})
+                status.append({"ins_code": code, "kind": "nav", "rows": len(rows), "completed_at": sources.tehran_now()})
         datastore.upsert(run.con, "backfill_status", status)
     print(f"  NAV from Fipiran: {len(targets)}/{len(codes)} funds matched, {added} new rows")
-    return added
+    return failed / len(targets) if targets else 0.0
 
 
 def refresh_indices(run: Run, codes: List[str]) -> int:
@@ -276,6 +289,29 @@ def store_live_macro(con: duckdb.DuckDBPyConnection, rows: List[Dict[str, Any]])
     return datastore.upsert(con, "macro_daily", [r for r in rows if (r["series"], r["d"]) not in closed])
 
 
+def add_past_shares(con: duckdb.DuckDBPyConnection, http: HttpClient) -> int:
+    """
+    Adds the ordinary shares in TSETMC's full instrument list that the market watch no longer shows
+    (delisted, or moved to another board under a new code), with their whole history. Without them
+    every stock test only sees the survivors. A failed instrument is retried by the next daily run.
+    """
+    run = Run(con, http)
+    raw = run.fetch("instrument_list", "all", lambda: sources.fetch_official_instruments(http))
+    if not raw:
+        print("  [FAIL] could not read the official instrument list")
+        return 1
+    have = {r[0] for r in con.execute("SELECT ins_code FROM instruments").fetchall()}
+    rows = [r for r in map(sources.parse_official_share, raw) if r and r["ins_code"] not in have]
+    print(f"  shares missing from the database: {len(rows)}")
+    if rows:
+        _upsert_instruments(con, rows)
+        failed = fill_prices_and_flows(run, [r["ins_code"] for r in rows], 0, "past shares")
+        adj = adjust.build(con)
+        print(f"  adjusted prices rebuilt: {adj['rows']:,} rows; {failed:.1%} of instruments failed")
+        return 1 if failed > MAX_FAILED_SHARE else 0
+    return 0
+
+
 def _new_instruments(con: duckdb.DuckDBPyConnection) -> List[str]:
     done = {r[0] for r in con.execute(
         "SELECT ins_code FROM backfill_status WHERE kind IN ('prices', 'flows') GROUP BY ins_code HAVING count(*) = 2"
@@ -288,7 +324,7 @@ def _new_instruments(con: duckdb.DuckDBPyConnection) -> List[str]:
 def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: bool, force: bool) -> int:
     run = Run(con, http)
     print(f"Daily run {run.id}")
-    today = date.today()
+    today = sources.tehran_today()
 
     ov1 = run.fetch("overview", "bourse", lambda: sources.fetch_market_overview(http, 1))
     ov2 = run.fetch("overview", "farabourse", lambda: sources.fetch_market_overview(http, 2))
@@ -316,7 +352,7 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
     else:
         # TSETMC keeps updating flows and closing prices for a while after the bell, so a snapshot
         # only counts as final once the data has settled; an earlier one is retaken next run.
-        final = closed and (d < today or datetime.now().hour >= SETTLE_HOUR)
+        final = closed and (d < today or sources.tehran_now().hour >= SETTLE_HOUR)
         prices_today, etf_count = take_snapshot(run, d, final=final)
         checks += snapshot_checks(run, d, prices_today, etf_count, final)
 
@@ -329,22 +365,34 @@ def collect_daily(con: duckdb.DuckDBPyConnection, http: HttpClient, allow_open: 
         x for x in quality.find_gaps(con, "daily_prices", days) + quality.find_gaps(con, "client_flows", days)
         if (x, "prices_flows") not in filled
     })
+    # A snapshot still not final when the market date moved on will never be retaken: history replaces it.
+    not_final = {r[0] for r in con.execute("SELECT d FROM snapshots WHERE NOT final AND d < ?", [d]).fetchall()}
+    unsettled = [x for x in days if x in not_final]
+    pf_gaps = sorted(set(pf_gaps) | set(unsettled))
     nav_gaps = [x for x in quality.find_gaps(con, "etf_nav", days) if (x, "nav") not in filled]
 
     if pf_gaps:
         n_days = sum(1 for x in days if x >= pf_gaps[0]) + 3
         print(f"  catch-up: {len(pf_gaps)} missed trading days since {pf_gaps[0]}")
-        fill_prices_and_flows(run, _universe(con), n_days, "catch-up")
+        failed = fill_prices_and_flows(run, _universe(con), n_days, "catch-up")
         refresh_indices(run, [r[0] for r in con.execute("SELECT index_code FROM indices").fetchall()])
-        datastore.upsert(con, "filled_days", [{"d": x, "kind": "prices_flows", "filled_at": datetime.now()} for x in pf_gaps])
+        if failed <= MAX_FAILED_SHARE:
+            datastore.upsert(con, "filled_days", [{"d": x, "kind": "prices_flows", "filled_at": sources.tehran_now()} for x in pf_gaps])
+            for x in unsettled:
+                con.execute("UPDATE snapshots SET final = TRUE WHERE d = ?", [x])
+        else:
+            print(f"  catch-up incomplete ({failed:.0%} of instruments failed); the next run retries these days")
     if nav_gaps:
         print(f"  catch-up: NAV missing on {len(nav_gaps)} trading days since {nav_gaps[0]}")
-        fill_nav(run, _universe(con, funds_only=True), show_all=False)
+        failed = fill_nav(run, _universe(con, funds_only=True), show_all=False)
         # Fipiran publishes a day or two late: only days it has had time to publish are marked as done.
         settled = days[:-3]
-        datastore.upsert(con, "filled_days", [
-            {"d": x, "kind": "nav", "filled_at": datetime.now()} for x in nav_gaps if x in settled
-        ])
+        if failed <= MAX_FAILED_SHARE:
+            datastore.upsert(con, "filled_days", [
+                {"d": x, "kind": "nav", "filled_at": sources.tehran_now()} for x in nav_gaps if x in settled
+            ])
+        else:
+            print(f"  NAV catch-up incomplete ({failed:.0%} of funds failed); the next run retries these days")
 
     # 3) Instruments listed since the last run get their full history
     new = _new_instruments(con)
@@ -402,13 +450,13 @@ def snapshot_checks(
         if official and official["d"] == d and not quality.compare_closes(p["close"], official["close"]):
             mismatches.append(f"{p['ins_code']}: {p['close']} vs {official['close']}")
     checks = [
-        quality.check_snapshot_date(d, date.today()),
+        quality.check_snapshot_date(d, sources.tehran_today()),
         quality.check_price_rows(con, d),
         quality.check_price_sanity(con, d),
         quality.check_flow_coverage(con, d),
         quality.check_flow_volume_consistency(con, d),
         quality.check_nav(con, d, etf_count),
-        quality.check_fundamentals(con, date.today()),
+        quality.check_fundamentals(con, sources.tehran_today()),
         ("spot_check", "fail" if mismatches else "ok",
          "; ".join(mismatches) if mismatches else f"{len(sample)} closes match the official daily list"),
     ]
@@ -424,7 +472,7 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
     print(f"Backfill run {run.id}")
 
     if not con.execute("SELECT count(*) FROM instruments").fetchone()[0]:
-        today = date.today()
+        today = sources.tehran_today()
         rows = run.fetch("market_watch", "all", lambda: sources.fetch_market_watch(http))
         if rows:
             _upsert_instruments(con, [sources.parse_watch_instrument(r, today) for r in rows])
@@ -457,10 +505,10 @@ def backfill(con: duckdb.DuckDBPyConnection, http: HttpClient, limit: Optional[i
 
     print("Quality checks:")
     checks = [
-        quality.check_macro_freshness(con, date.today(), list(sources.TGJU_SERIES)),
-        quality.check_global_freshness(con, date.today()),
-        quality.check_usd_inputs_freshness(con, date.today()),
-        quality.check_bill_yields(con, date.today(), unparsed_bills),
+        quality.check_macro_freshness(con, sources.tehran_today(), list(sources.TGJU_SERIES)),
+        quality.check_global_freshness(con, sources.tehran_today()),
+        quality.check_usd_inputs_freshness(con, sources.tehran_today()),
+        quality.check_bill_yields(con, sources.tehran_today(), unparsed_bills),
         quality.check_fetch_errors(con, run.id),
     ]
     return 1 if quality.save_and_summarize(con, run.id, None, checks) else 0
@@ -482,7 +530,7 @@ def status(con: duckdb.DuckDBPyConnection) -> int:
     span = f"  {lo} .. {hi} ({seen_days} days)" if lo else ""
     print(f"  {'fundamentals_seen':<15} {n:>10,} rows{span}")
 
-    days = _trading_days(con, date.today() - timedelta(days=30))[-10:]
+    days = _trading_days(con, sources.tehran_today() - timedelta(days=30))[-10:]
     if days:
         print("Last 10 trading days (prices / flows / NAV / snapshot):")
         for d in days:
@@ -514,6 +562,7 @@ def main() -> int:
     p_back.add_argument("--limit", type=int)
     p_back.add_argument("--refresh", action="store_true", help="re-download instruments already backfilled")
     sub.add_parser("status")
+    sub.add_parser("past-shares", help="one-off: add delisted shares and their history (survivorship bias)")
     sub.add_parser("global", help="re-download the full history of the global gold and free-USD drivers only")
     sub.add_parser("bills", help="refresh only the treasury bill yields")
     ap.add_argument("--db", default=datastore.DEFAULT_DB_PATH)
@@ -534,6 +583,8 @@ def main() -> int:
             run = Run(con, http)
             refresh_bills(run)
             return 1 if con.execute("SELECT count(*) FROM fetch_log WHERE run_id = ? AND status = 'error'", [run.id]).fetchone()[0] else 0
+        if args.cmd == "past-shares":
+            return add_past_shares(con, http)
         if args.cmd == "daily":
             return collect_daily(con, http, args.allow_open, args.force)
         return backfill(con, http, args.limit, args.refresh)

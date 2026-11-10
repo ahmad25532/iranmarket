@@ -333,7 +333,12 @@ def main() -> int:
         if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'price_adj'").fetchall()[0][0]:
             adjust.build(con)
         q = args.ticker.replace("ی", "ي").replace("ک", "ك")
-        row = con.execute("SELECT ins_code FROM instrument_class WHERE ticker = ?", [q]).fetchall()
+        # An old code can share its ticker with the current one: take the one that traded last.
+        row = con.execute(
+            """SELECT c.ins_code FROM instrument_class c
+               LEFT JOIN (SELECT ins_code, max(d) AS last_d FROM price_adj GROUP BY 1) p USING (ins_code)
+               WHERE c.ticker = ? ORDER BY p.last_d DESC NULLS LAST""", [q]
+        ).fetchall()
         if not row:
             print(f"symbol {args.ticker} not found")
             return 1

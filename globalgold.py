@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import duckdb
 import numpy as np
 import polars as pl
+import sources
 
 from net import HttpClient
 
@@ -146,7 +147,7 @@ def refresh(run: Any, full: bool) -> Dict[str, int]:
     import datastore
     con, http = run.con, run.http
     counts: Dict[str, int] = {}
-    today = date.today()
+    today = sources.tehran_today()
     have = dict(con.execute("SELECT series, max(d) FROM global_daily GROUP BY series").fetchall())
 
     for series, symbol in YAHOO_SERIES.items():

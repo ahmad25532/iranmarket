@@ -194,12 +194,13 @@ def classify(asset_class: str, is_gold: bool) -> str:
 def value_portfolio(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any], market: Dict[str, Any]) -> Dict[str, Any]:
     items = []
     for h in pf["holdings"]:
+        # Treasury bills are not in daily_prices. A ticker can belong to an old code and a current one,
+        # so the row with the latest price wins.
         r = _rows(con, """
+            WITH px AS (SELECT ins_code, close, d FROM daily_prices UNION ALL SELECT ins_code, close, d FROM bill_yields)
             SELECT c.ins_code, c.ticker, c.name, c.asset_class, g.ins_code IS NOT NULL AS is_gold, p.close, p.d
-            FROM instrument_class c LEFT JOIN gold_funds g USING (ins_code)
-            LEFT JOIN (SELECT ins_code, close, d FROM daily_prices WHERE ins_code IN
-                       (SELECT ins_code FROM instrument_class WHERE ticker = ?) ORDER BY d DESC LIMIT 1) p USING (ins_code)
-            WHERE c.ticker = ?""", [h["ticker"], h["ticker"]])
+            FROM instrument_class c LEFT JOIN gold_funds g USING (ins_code) LEFT JOIN px p USING (ins_code)
+            WHERE c.ticker = ? ORDER BY p.d DESC NULLS LAST LIMIT 1""", [h["ticker"]])
         if not r or r[0]["close"] is None:
             items.append({"ticker": h["ticker"], "qty": h["qty"], "error": "قیمت پیدا نشد"})
             continue
@@ -290,7 +291,7 @@ def record_today(con: duckdb.DuckDBPyConnection, source: str, overwrite: bool = 
     A wrong record would read as a real gain or loss, so a portfolio file that cannot be read or a
     holding without a price means no record at all; the next record simply covers the gap.
     """
-    today = today or date.today()
+    today = today or sources.tehran_today()
     try:
         with open(PORTFOLIO_PATH, encoding="utf-8") as f:
             json.load(f)  # load_portfolio treats a damaged file as an empty portfolio
@@ -328,7 +329,7 @@ def state(con: duckdb.DuckDBPyConnection, pf: Dict[str, Any],
           live: Optional[List[Dict[str, Any]]] = None, record_status: Optional[str] = None) -> Dict[str, Any]:
     market = market_snapshot(con, live)
     return {
-        "generated_at": datetime.now(),
+        "generated_at": sources.tehran_now(),
         "health": health(con),
         "market": market,
         "gold_funds": goldfunds.fund_table(con),
@@ -399,7 +400,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(503, {"error": "داده‌ها در حال به‌روزرسانی هستند؛ چند دقیقه دیگر صفحه را تازه کنید."})
         return self._json(200, {**_last_state, "stale": True})
 
+    def _from_own_page(self) -> bool:
+        """
+        Any website open in the browser can send requests to 127.0.0.1. The Host check stops DNS
+        rebinding and the Origin check stops another site's page from posting here.
+        """
+        port = self.server.server_address[1]
+        own = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        origin = self.headers.get("Origin")
+        return self.headers.get("Host") in own and (origin is None or origin.split("://", 1)[-1] in own)
+
     def do_GET(self):
+        if not self._from_own_page():
+            return self._send(403, b"forbidden", "text/plain")
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
             with open(os.path.join(datastore.BASE_DIR, "dashboard.html"), "rb") as f:
@@ -409,11 +422,17 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b"not found", "text/plain")
 
     def do_POST(self):
+        # Read the body even for a refusal: closing with unread data resets the connection on Windows.
+        try:
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        except ValueError:
+            return self._json(400, {"error": "درخواست نامعتبر"})
+        if not self._from_own_page():
+            return self._send(403, b"forbidden", "text/plain")
         if self.path not in ("/api/portfolio", "/api/route", "/api/flows", "/api/flows/delete"):
             return self._send(404, b"not found", "text/plain")
         try:
-            length = int(self.headers.get("Content-Length", 0))
-            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            payload = json.loads(body.decode("utf-8") or "{}")
         except (ValueError, UnicodeDecodeError):
             return self._json(400, {"error": "درخواست نامعتبر"})
 

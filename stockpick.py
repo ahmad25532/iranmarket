@@ -19,8 +19,8 @@ The rules below were fixed before the test period was looked at, and selection i
 `today` prints a current list only for confirmed rules.
 
 There is no fundamental data in the database (earnings, book value, shares outstanding), so value
-and size factors are not tested. Only currently listed names exist, so results carry survivorship
-bias, which flatters every rule and the universe alike.
+and size factors are not tested. Delisted shares are included (collector.py past-shares), but one whose
+market closed stays in a portfolio at its last price, which can flatter a rule that bought it.
 """
 
 import argparse

@@ -270,7 +270,13 @@ def _row(p: Panel, label: str, safe: str, w: np.ndarray, rebalance_every: int = 
     return label, safe, summarize(run_weights(p, w, rebalance_every=rebalance_every), w)
 
 
-def exit_signal_table(p: Panel) -> List[Tuple[str, str, Dict[str, float]]]:
+def aligned(signal: Callable[[Panel], np.ndarray], p: Panel, full: Panel) -> np.ndarray:
+    """A signal on p's days, computed on the longer history so its averages are warm on p's first day."""
+    a = full.days.index(p.days[0])
+    return signal(full)[a:a + len(p.days)]
+
+
+def exit_signal_table(p: Panel, full: Panel) -> List[Tuple[str, str, Dict[str, float]]]:
     rows = [_row(p, "buy and hold", "100% stocks", static(p, 1, 0, 0)),
             _row(p, "buy and hold", "100% gold", static(p, 0, 1, 0)),
             _row(p, "buy and hold", "100% fixed income", static(p, 0, 0, 1)),
@@ -279,11 +285,11 @@ def exit_signal_table(p: Panel) -> List[Tuple[str, str, Dict[str, float]]]:
             _row(p, "mix, rebalance 60d", "1/3 each", static(p, 1 / 3, 1 / 3, 1 / 3), 60),
             _row(p, "mix, rebalance 60d", "half stocks half gold", static(p, 0.5, 0.5, 0), 60)]
     for name, fn in EXIT_SIGNALS.items():
-        on = fn(p)
+        on = aligned(fn, p, full)
         for safe_name, off in SAFE_MIXES.items():
             rows.append(_row(p, name, safe_name, switch(on, (1.0, 0.0, 0.0), off)))
     for name, fn in ROTATIONS.items():
-        rows.append(_row(p, name, "gold (rotation)", switch(fn(p), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))))
+        rows.append(_row(p, name, "gold (rotation)", switch(aligned(fn, p, full), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))))
     return rows
 
 
@@ -362,9 +368,9 @@ def cheapest_fund_spread(g: pl.DataFrame, horizon: str = "fwd60") -> pl.DataFram
     return per_day.with_columns((pl.col("cheapest") - others_mean).alias("spread")).sort("d")
 
 
-def cost_decomposition(p: Panel, signal: Callable[[Panel], np.ndarray]) -> List[Tuple[str, float]]:
+def cost_decomposition(p: Panel, signal: Callable[[Panel], np.ndarray], full: Panel) -> List[Tuple[str, float]]:
     """Runs one stocks/gold switching signal with frictions added one at a time."""
-    w = switch(signal(p), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+    w = switch(aligned(signal, p, full), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
     out = []
     for label, slip, fees, locks in (("no costs, no queue locks", 0.0, False, False),
                                       ("+ fees", 0.0, True, False),
@@ -422,7 +428,7 @@ def report(con: duckdb.DuckDBPyConnection) -> None:
         p = full.slice(a, b)
         print(f"\n=== Stock exit signals, {title}: {p.days[0]} .. {p.days[-1]} ===")
         print(header)
-        for label, safe, r in exit_signal_table(p):
+        for label, safe, r in exit_signal_table(p, full):
             print(_fmt_row(label, safe, r))
 
     print("\n=== 18k gold bubble vs intrinsic (ounce x free USD) -> next 60 trading days of 18k gold ===")
@@ -475,10 +481,10 @@ def report(con: duckdb.DuckDBPyConnection) -> None:
                   f"price {m['price_spread']:+.2%}, NAV {m['nav_spread']:+.2%}, wins {m['wins']:.0%}")
 
     print("\n=== Where the exit signal's edge goes (money flow 60d -> gold, test period, CAGR in USD) ===")
-    for label, cagr in cost_decomposition(full.slice(*OUT_OF_SAMPLE), EXIT_SIGNALS["money flow 60d"]):
+    for label, cagr in cost_decomposition(full.slice(*OUT_OF_SAMPLE), EXIT_SIGNALS["money flow 60d"], full):
         print(f"  {label:<40}{cagr:>8.1%}")
-    strict = load_panel(con, closing_queues=True).slice(*OUT_OF_SAMPLE)
-    print(f"  {'same, counting closing queues as locks':<40}{cost_decomposition(strict, EXIT_SIGNALS['money flow 60d'])[-1][1]:>8.1%}")
+    strict = load_panel(con, closing_queues=True)
+    print(f"  {'same, counting closing queues as locks':<40}{cost_decomposition(strict.slice(*OUT_OF_SAMPLE), EXIT_SIGNALS['money flow 60d'], strict)[-1][1]:>8.1%}")
 
     print("\n=== Past crises: TEDPIX change in USD, share of the window out of stocks, first exit ===")
     for name in ("trend 200d", "trend in USD 200d", "money flow 60d"):

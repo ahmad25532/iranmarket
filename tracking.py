@@ -24,6 +24,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 import datastore
+import sources
 
 HISTORY_PATH = os.path.join(datastore.BASE_DIR, "data", "portfolio_history.json")
 FLOWS_PATH = os.path.join(datastore.BASE_DIR, "data", "portfolio_flows.json")
@@ -158,7 +159,7 @@ def parse_date(text: Any) -> date:
 def validate_flow(payload: Dict[str, Any], today: Optional[date] = None) -> Dict[str, Any]:
     """Returns a clean log entry or raises ValueError with a Persian message."""
     d = parse_date(payload.get("d"))
-    if d > (today or date.today()):
+    if d > (today or sources.tehran_today()):
         raise ValueError("تاریخ نمی‌تواند در آینده باشد")
     kind = payload.get("kind")
     if kind not in ("deposit", "withdrawal"):
@@ -191,7 +192,7 @@ def build_day(d: date, valuation: Dict[str, Any], market: Dict[str, Any], source
         "prices": prices,
         "price_dates": price_dates,
         "source": source,
-        "recorded_at": datetime.now().isoformat(timespec="seconds"),
+        "recorded_at": sources.tehran_now().isoformat(timespec="seconds"),
     }
 
 

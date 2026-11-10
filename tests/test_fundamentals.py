@@ -137,11 +137,11 @@ def test_daily_run_fills_the_table_dated_by_the_run_not_the_market(con, monkeypa
     # feed, so dating these rows by the market date would be looking ahead.
     monkeypatch.setattr(adjust, "build", lambda c: {"rows": 0, "events": 0})
     monkeypatch.setattr(collector, "refresh_global", lambda *a, **k: None)
-    market_date = date.today() - timedelta(days=3)
+    market_date = sources.tehran_today() - timedelta(days=3)
     collector.collect_daily(con, FakeHttp(int(market_date.strftime("%Y%m%d"))), allow_open=False, force=False)
     rows = stored(con)
     assert set(rows) == {"profit", "loss"}
-    assert rows["profit"][0] == date.today() != market_date
+    assert rows["profit"][0] == sources.tehran_today() != market_date
     assert rows["profit"][2:] == (693.0, 6.4)
     checks = con.execute("SELECT severity FROM quality_checks WHERE check_name = 'fundamentals'").fetchall()
     assert checks == [("ok",)]
