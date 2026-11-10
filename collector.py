@@ -27,6 +27,7 @@ import duckdb
 
 import adjust
 import dashboard
+import codal
 import datastore
 import freeusd
 import globalgold
@@ -565,6 +566,12 @@ def main() -> int:
     sub.add_parser("past-shares", help="one-off: add delisted shares and their history (survivorship bias)")
     sub.add_parser("global", help="re-download the full history of the global gold and free-USD drivers only")
     sub.add_parser("bills", help="refresh only the treasury bill yields")
+    p_codal = sub.add_parser("codal", help="slow, resumable: financial statements from Codal (see codal.py)")
+    p_codal.add_argument("--symbols", nargs="+", help="only these tickers, e.g. فولاد شپنا")
+    p_codal.add_argument("--limit", type=int, help="only the N most traded shares")
+    p_codal.add_argument("--max-requests", type=int, help="stop after this many requests")
+    p_codal.add_argument("--delay", type=float, default=codal.DEFAULT_DELAY_S, help="seconds between requests")
+    p_codal.add_argument("--reparse", action="store_true", help="re-parse stored sheets only, no fetching")
     ap.add_argument("--db", default=datastore.DEFAULT_DB_PATH)
     args = ap.parse_args()
 
@@ -572,6 +579,9 @@ def main() -> int:
     try:
         if args.cmd == "status":
             return status(con)
+        if args.cmd == "codal" and args.reparse:
+            print(f"  re-parsed {codal.reparse(con)} letters")
+            return 0
         http = HttpClient()
         if not http.source_ip:
             print("  note: no LAN interface reached TSETMC; using the default route")
@@ -585,6 +595,8 @@ def main() -> int:
             return 1 if con.execute("SELECT count(*) FROM fetch_log WHERE run_id = ? AND status = 'error'", [run.id]).fetchone()[0] else 0
         if args.cmd == "past-shares":
             return add_past_shares(con, http)
+        if args.cmd == "codal":
+            return codal.run(con, http, args.symbols, args.limit, args.delay, args.max_requests)
         if args.cmd == "daily":
             return collect_daily(con, http, args.allow_open, args.force)
         return backfill(con, http, args.limit, args.refresh)

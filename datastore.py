@@ -166,6 +166,58 @@ CREATE TABLE IF NOT EXISTS fundamentals_seen (
     PRIMARY KEY (ins_code, seen_on)
 );
 
+-- Codal financial-statement letters (see codal.py). published_at is when the letter became public: a
+-- backtest may only use a letter from the trading day after published_at. Amendments are separate rows.
+CREATE TABLE IF NOT EXISTS codal_letters (
+    tracing_no     BIGINT PRIMARY KEY,
+    ins_code       VARCHAR,
+    symbol         VARCHAR,
+    title          VARCHAR,
+    sent_at        TIMESTAMP,   -- Tehran time
+    published_at   TIMESTAMP,   -- Tehran time
+    period_end     DATE,
+    period_months  INTEGER,
+    audited        BOOLEAN,
+    consolidated   BOOLEAN,
+    amendment      BOOLEAN,
+    url            VARCHAR
+);
+
+-- Shares whose letter list has been fetched at least once.
+CREATE TABLE IF NOT EXISTS codal_progress (
+    ins_code    VARCHAR PRIMARY KEY,
+    letters_at  TIMESTAMP
+);
+
+-- Raw cells of each letter's income statement and balance sheet, as JSON
+-- [[table, row, column, value, period_end], ...], so parsing can be redone without fetching.
+-- sheet = 'none' marks a letter with no readable sheet (it is not fetched again).
+CREATE TABLE IF NOT EXISTS codal_sheets (
+    tracing_no    BIGINT,
+    sheet         VARCHAR,     -- 'income' | 'balance' | 'none'
+    fetched_at    TIMESTAMP,
+    template      VARCHAR,
+    period_end    VARCHAR,     -- Jalali, as Codal gives it
+    consolidated  BOOLEAN,
+    cells         VARCHAR,
+    PRIMARY KEY (tracing_no, sheet)
+);
+
+-- Figures for the letter's own period, parsed from codal_sheets. Amounts in million rials, EPS in rials.
+-- eps_basic and net_income cover period_months (not annualized). missing lists fields not found.
+CREATE TABLE IF NOT EXISTS codal_financials (
+    tracing_no     BIGINT PRIMARY KEY,
+    period_end_ds  DATE,
+    revenue        DOUBLE,
+    net_income     DOUBLE,
+    eps_basic      DOUBLE,
+    eps_net        DOUBLE,
+    equity         DOUBLE,
+    total_assets   DOUBLE,
+    capital        DOUBLE,
+    missing        VARCHAR
+);
+
 -- Treasury bills (see treasury.py), one row per bill per traded day. Kept apart from daily_prices, which
 -- holds the normal-board universe. Rows stay after a bill matures: TSETMC drops matured bills from its list.
 CREATE TABLE IF NOT EXISTS bill_yields (
@@ -251,6 +303,10 @@ TABLE_KEYS = {
     "monthly_macro": ["series", "period_end"],
     "fundamentals_seen": ["ins_code", "seen_on"],
     "bill_yields": ["ins_code", "d"],
+    "codal_letters": ["tracing_no"],
+    "codal_progress": ["ins_code"],
+    "codal_sheets": ["tracing_no", "sheet"],
+    "codal_financials": ["tracing_no"],
     "backfill_status": ["ins_code", "kind"],
     "snapshots": ["d"],
     "filled_days": ["d", "kind"],
