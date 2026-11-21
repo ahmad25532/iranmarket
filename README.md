@@ -1,234 +1,234 @@
-# Iran Market AI | دستیار سرمایه‌گذاری بورس و طلای ایران
+# Iran Market AI
 
-جمع‌آوری روزانه داده‌های بورس تهران، صندوق‌ها، طلا و دلار؛ آزمون سیگنال‌ها روی داده‌های گذشته با قواعد واقعی بازار ایران؛ و داشبوردی که فقط نتایج تأییدشده را نشان می‌دهد. این ابزار توصیه خرید یا فروش نیست.
+A personal investment research assistant for the Tehran Stock Exchange, funds, gold and the free-market USD.
 
-## 🧭 راهنمای ساده (صفحه اصلی)
+It collects market data daily, tests signals on historical data using real Iranian market rules, and shows a dashboard that displays only results that held up in testing. **This tool is not buy or sell advice.**
 
-صفحه اول برای کسی است که هیچ چیز از سرمایه‌گذاری نمی‌داند. هر بار که باز می‌شود **یک جمله** می‌گوید: «امروز هیچ کاری لازم نیست»، «پول نقدتان را این‌طور سرمایه‌گذاری کنید» یا «وقت متعادل‌کردن سبد است»، با مبلغ هر خرید و فروش به تومان.
+## 🧭 Plain-language guide (home page)
 
-- **ورودی:** پول نقد، گرم طلا، سکه، نماد و تعداد صندوق‌ها، و یک سؤال: چه مقدار از این پول را ممکن است تا یک سال آینده لازم داشته باشید. همان بخش در درآمد ثابت می‌ماند و بقیه نصف سهام و نصف طلا می‌شود.
-- **پول جدید:** مبلغ پس‌انداز ماه را می‌گیرد و می‌گوید چقدرش را کدام دسته بخرید.
-- **چه بخرم:** پرمعامله‌ترین صندوق‌های شاخصی و سهامی، طلا و درآمد ثابت با قیمت هر واحد. ترتیب بر اساس حجم معامله است، چون هیچ روش انتخاب صندوقی در آزمون تأیید نشد. صندوق‌های اهرمی و بخشی نمی‌آیند.
-- **چرا:** اگر ۱۰۰ میلیون تومان را یک بار می‌خریدید چه می‌شد، به تومان و به قدرت خرید، با بدترین افت در مسیر، برای هر دو دوره پژوهش و کل دوره. از دیتابیس حساب می‌شود، نه عدد ثابت.
-- **وقتی نمی‌شود اعتماد کرد:** اگر آخرین روز معاملاتی بیش از ۷ روز پیش باشد، یا قیمت یکی از دارایی‌ها پیدا نشود، صفحه هیچ مبلغی نمی‌دهد و می‌گوید چرا.
+The first page is written for someone who knows nothing about investing. Each time it opens it gives **one sentence**: "nothing to do today", "invest your cash like this" or "time to rebalance", with the amount of every buy and sell in toman.
 
-هیچ پیش‌بینی‌ای در کار نیست و نام هیچ سهمی پیشنهاد نمی‌شود؛ فقط قاعده‌هایی که در آزمون خارج از نمونه ماندند (`advisor.py`). همین خروجی به شکل متن:
+- **Inputs:** cash, grams of gold, coins, the symbols and quantities of funds you hold, and one question: how much of this money you might need within the next year. That part stays in fixed income; the rest is split half stocks, half gold.
+- **New money:** takes this month's savings and tells you how much to buy in each category.
+- **What to buy:** the most heavily traded index and equity funds, gold and fixed income, with the price per unit. They are ordered by trading volume, because no fund-selection method was confirmed in testing. Leveraged and sector funds are excluded.
+- **Why:** what would have happened if you had bought 100 million toman in one go, in toman and in purchasing power, with the worst drawdown along the way, for both the research period and the full period. It is computed from the database, not a fixed number.
+- **When it cannot be trusted:** if the last trading day was more than 7 days ago, or the price of any asset cannot be found, the page gives no amount and says why.
+
+There are no predictions and no individual stock is recommended; only rules that survived the out-of-sample test (`advisor.py`). The same output as text:
 
 ```bash
 .venv\Scripts\python.exe advisor.py
 ```
 
-## ✨ داشبورد پیشرفته (`/pro`)
+## ✨ Advanced dashboard (`/pro`)
 
-داشبورد فقط چیزهایی را نشان می‌دهد که در آزمون فاز ۳ (روی داده‌ای که در طراحی استفاده نشده) تأیید شدند:
+The dashboard shows only what was confirmed in the phase 3 test (on data not used in the design):
 
-- **ترکیب سبد شما در برابر هدف:** نسبت فعلی سهام، طلا، درآمد ثابت و نقد در برابر درصدهایی که خودتان تعیین می‌کنید، فاصله هر کدام به تومان، مقایسه با باند ۲۰ واحدی و تقسیم پول جدید یا برداشت بین دسته‌ها.
-- **صندوق‌های طلا امروز:** حباب هر صندوق نسبت به NAV ابطال، با برچسب نقدشوندگی و کم‌حباب‌ترین صندوق نقدشونده.
-- **زمینه بازار (سیگنال نیست):** دلار آزاد، طلای ۱۸ عیار، انس، حباب ۱۸ عیار، شاخص کل به دلار.
-- **طلای جهانی:** محرک‌های انس (بازده واقعی، دلار، نوسان ضمنی، نسبت طلا به نقره، موقعیت صندوق‌ها در COT) و جایگاه امروزشان در ۵ سال گذشته؛ تجزیه بازده طلای ۱۸ عیار به سهم انس، دلار آزاد و حباب؛ و نتیجه آزمون سیگنال‌های زمان‌بندی انس (هیچ‌کدام تأیید نشد).
-- **دلار آزاد:** نرخ واقعی دلار (تعدیل‌شده با تورم ایران و آمریکا)، فاصله با نیما، تورم بانک مرکزی، و نتیجه آزمون سیگنال‌های زمان‌بندی دلار (هیچ‌کدام تأیید نشد).
-- **نرخ بدون ریسک (سیگنال نیست):** بازده تا سررسید اسناد خزانه، میانه روزانه و بخش تا یک سال.
-- **سلامت داده‌ها:** آخرین روز معاملاتی، نهایی بودن عکس روز و نتیجه بررسی‌های کیفیت.
+- **Your portfolio mix vs. target:** the current share of stocks, gold, fixed income and cash against percentages you set, each gap in toman, a comparison with a 20-point band, and how to split new money or a withdrawal across categories.
+- **Gold funds today:** each fund's premium over redemption NAV, with a liquidity label and the lowest-premium liquid fund.
+- **Market context (not a signal):** free-market USD, 18-karat gold, the ounce, the 18-karat premium, the total index in dollars.
+- **Global gold:** ounce drivers (real yield, the dollar, implied volatility, gold/silver ratio, fund positioning in COT) and where they stand today relative to the last 5 years; a decomposition of 18-karat gold returns into the ounce, the free-market dollar and the premium; and the result of testing ounce timing signals (none confirmed).
+- **Free-market USD:** the real dollar rate (adjusted for Iranian and US inflation), the gap to NIMA, Central Bank inflation, and the result of testing dollar timing signals (none confirmed).
+- **Risk-free rate (not a signal):** yield to maturity of treasury bills, the daily median and the part up to one year.
+- **Data health:** the last trading day, whether the day's snapshot is final, and the result of the quality checks.
+- **Portfolio performance:** the time-weighted return of the portfolio in rials and in free-market dollars, against holding 50% total index and 50% 18-karat gold, gold only, and dollar only.
 
-- **عملکرد سبد:** بازده زمان‌وزنی سبد به ریال و دلار آزاد، در برابر نگه‌داشتن ۵۰٪ شاخص کل و ۵۰٪ طلای ۱۸ عیار، فقط طلا و فقط دلار.
+Your portfolio in `data/portfolio.json`, the daily history in `data/portfolio_history.json` and deposits and withdrawals in `data/portfolio_flows.json` are stored only on this computer and are not committed to git.
 
-سبد شما در `data/portfolio.json`، تاریخچه روزانه در `data/portfolio_history.json` و واریز و برداشت‌ها در `data/portfolio_flows.json` فقط روی همین کامپیوتر ذخیره می‌شوند و وارد گیت نمی‌شوند.
+### How portfolio performance is recorded and computed
 
-### عملکرد سبد چطور ثبت و حساب می‌شود
-
-- **ثبت روزانه:** `collector.py daily` هر بار ارزش امروز را ثبت می‌کند، پس لازم نیست داشبورد باز شود. باز کردن داشبورد فقط اگر امروز هنوز ثبت نشده باشد ثبت می‌کند و ذخیره سبد ردیف امروز را تازه می‌کند. اگر قیمت یکی از دارایی‌ها پیدا نشود، آن روز ثبت نمی‌شود.
-- **روزهای بدون ثبت:** حدس زده نمی‌شوند. رکورد بعدی کل فاصله را پوشش می‌دهد و نتیجه تغییری نمی‌کند، مگر واریز یا برداشتی در همان فاصله باشد که آن بازه تقریبی علامت می‌خورد.
-- **واریز و برداشت:** هر پولی که وارد یا خارج می‌شود را با تاریخ روزی که سبد را به‌روز کردید ثبت کنید. سود نقدی و جابه‌جایی بین دارایی‌ها واریز و برداشت نیستند. تغییر بیش از ۲٪ که قیمت‌ها و این فهرست توضیحش نمی‌دهند هشدار می‌گیرد.
-- **مقایسه‌ها:** هر کدام یک بار در اولین رکورد خریده و بدون ریبالانس نگه داشته می‌شوند و کارمزد و اختلاف خرید و فروش ندارند.
+- **Daily recording:** `collector.py daily` records today's value each time it runs, so the dashboard does not need to be open. Opening the dashboard records only if today has not been recorded yet, and saving the portfolio refreshes today's row. If the price of any asset cannot be found, that day is not recorded.
+- **Days without a record:** they are not guessed. The next record covers the whole gap and the result does not change, unless there was a deposit or withdrawal in that gap, in which case the period is marked approximate.
+- **Deposits and withdrawals:** record any money coming in or going out, dated the day you update the portfolio. Cash dividends and switching between assets are not deposits or withdrawals. A change of more than 2% that prices and this list do not explain triggers a warning.
+- **Comparisons:** each one is bought once at the first record and held without rebalancing, with no fees or bid-ask spread.
 
 ---
 
-## 🚀 نحوه اجرا در ویندوز
+## 🚀 How to run on Windows
 
-فایل [`run_dashboard.bat`](run_dashboard.bat) را اجرا کنید یا:
+Run [`run_dashboard.bat`](run_dashboard.bat) or:
 
 ```bash
 .venv\Scripts\python.exe dashboard.py
 ```
 
-سپس در مرورگر: 👉 **http://127.0.0.1:8085** (راهنمای ساده) و **http://127.0.0.1:8085/pro** (داشبورد پیشرفته)
+Then open in a browser: 👉 **http://127.0.0.1:8085** (plain-language guide) and **http://127.0.0.1:8085/pro** (advanced dashboard)
 
 ---
 
-## 🗄️ لایه داده (فاز ۱)
+## 🗄️ Data layer (phase 1)
 
-داده‌ها در `data/market.duckdb` ذخیره می‌شوند (قیمت خام روزانه، جریان پول حقیقی/حقوقی، NAV صندوق‌ها، شاخص‌ها، دلار/طلا/سکه/انس).
-بعد از هر اجرا، بررسی کیفیت داده انجام و نتیجه در جدول `quality_checks` ثبت می‌شود.
+Data is stored in `data/market.duckdb` (raw daily prices, real/legal-entity money flow, fund NAV, indices, dollar/gold/coin/ounce). After every run a data-quality check is performed and its result is stored in the `quality_checks` table.
 
-| فایل | کار |
+| File | Purpose |
 |---|---|
-| `net.py` | اتصال HTTP با گواهی TLS معتبر و مسیر مستقیم برای سایت‌های داخلی |
-| `sources.py` | دریافت و تبدیل داده‌های TSETMC، TGJU و Fipiran (تاریخچه NAV) |
-| `datastore.py` | ساختار پایگاه داده DuckDB |
-| `quality.py` | بررسی‌های کیفیت داده |
-| `collector.py` | اجرای روزانه و دریافت تاریخچه |
+| `net.py` | HTTP connection with valid TLS certificates and a direct route for domestic sites |
+| `sources.py` | Fetching and converting data from TSETMC, TGJU and Fipiran (NAV history) |
+| `datastore.py` | DuckDB database schema |
+| `quality.py` | Data-quality checks |
+| `collector.py` | Daily run and history download |
 
-نصب (یک بار):
+Install (once):
 
 ```bash
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-دستورها:
+Commands:
 
 ```bash
-.venv\Scripts\python.exe collector.py backfill   # تاریخچه کامل (یک بار، حدود ۱۰ تا ۲۰ دقیقه)
-.venv\Scripts\python.exe collector.py daily      # عکس روزانه + جبران روزهای از دست رفته (هر وقت و هر چند بار)
-.venv\Scripts\python.exe collector.py past-shares # سهم‌های حذف‌شده و تاریخچه‌شان (یک بار، حدود ۱۰ دقیقه)
-.venv\Scripts\python.exe backup.py                # نسخه پشتیبان دیتابیس و فایل‌های سبد
-.venv\Scripts\python.exe collector.py status     # وضعیت داده‌ها و پوشش ۱۰ روز معاملاتی اخیر
-.venv\Scripts\python.exe -m pytest -q tests      # تست‌ها
+.venv\Scripts\python.exe collector.py backfill   # full history (once, about 10 to 20 minutes)
+.venv\Scripts\python.exe collector.py daily      # daily snapshot + fills in missed days (any time, any number of times)
+.venv\Scripts\python.exe collector.py past-shares # delisted stocks and their history (once, about 10 minutes)
+.venv\Scripts\python.exe backup.py                # backup of the database and portfolio files
+.venv\Scripts\python.exe collector.py status     # data status and coverage of the last 10 trading days
+.venv\Scripts\python.exe -m pytest -q tests      # tests
 ```
 
-### اجرای خودکار و جبران روزهای خاموش بودن کامپیوتر
+### Automatic runs and catching up after the computer was off
 
-تسک «IranMarketAI Daily Collect» در Task Scheduler ویندوز فایل [`run_daily_collect.bat`](run_daily_collect.bat) را اجرا می‌کند:
-- ساعت ۱۶:۰۰ شنبه تا چهارشنبه، ساعت ۲۰:۰۰ هر روز، و ۵ دقیقه بعد از هر بار ورود به ویندوز
-- اگر کامپیوتر سر ساعت خاموش باشد، اولین فرصت بعد از روشن شدن اجرا می‌شود
+The "IranMarketAI Daily Collect" task in Windows Task Scheduler runs [`run_daily_collect.bat`](run_daily_collect.bat):
+- at 16:00 Saturday to Wednesday, at 20:00 every day, and 5 minutes after every Windows login
+- if the computer is off at the scheduled time, it runs at the first opportunity after it is turned on
 
-`daily` هر بار اجرا شود:
-1. اگر عکس پایانی امروز هنوز گرفته نشده، می‌گیرد (عکس قبل از ساعت ۱۴ نهایی حساب نمی‌شود و دوباره گرفته می‌شود).
-2. عکس غیرنهایی روزهای گذشته (مثلاً وقتی اینترنت قطع شده) از تاریخچه رسمی جایگزین می‌شود. همه ساعت‌ها به وقت تهران است، حتی اگر ساعت ویندوز روی منطقه دیگری باشد. روزهای معاملاتی ۱۲۰ روز اخیر را با تقویم شاخص کل مقایسه می‌کند و هر روزی که ناقص است (مثلاً به دلیل سفر) را از تاریخچه رسمی پر می‌کند: قیمت و جریان پول از TSETMC، NAV صندوق‌ها از Fipiran.
-3. اگر همه چیز کامل باشد، در کمتر از یک دقیقه تمام می‌شود.
+Each time `daily` runs:
+1. If today's closing snapshot has not been taken yet, it takes it (a snapshot taken before 14:00 does not count as final and is retaken).
+2. Non-final snapshots of past days (for example when the internet was down) are replaced from the official history. All times are Tehran time, even if the Windows clock is set to another zone. It compares the trading days of the last 120 days with the total-index calendar and fills every incomplete day (for example because of a trip) from the official history: price and money flow from TSETMC, fund NAV from Fipiran.
+3. If everything is complete, it finishes in under a minute.
 
-گزارش هر روز در `data/logs` ذخیره می‌شود.
+A log for each day is saved in `data/logs`.
 
-بعد از هر اجرا `backup.py` نسخه ۳ روز اخیر را در `data/backups` نگه می‌دارد. این پوشه روی همان دیسک است؛ برای حفاظت در برابر خرابی دیسک، متغیر `IRANMARKET_BACKUP_DIR` را روی درایو دیگر یا پوشه همگام‌شده بگذارید.
+After every run `backup.py` keeps the last 3 days of backups in `data/backups`. This folder is on the same disk; to protect against disk failure, set the `IRANMARKET_BACKUP_DIR` environment variable to another drive or a synced folder.
 
-محدودیت‌های شناخته‌شده:
-- Fipiran بعضی NAVها را یکی دو روز دیرتر منتشر می‌کند؛ سیستم تا کامل شدن آن روزها دوباره تلاش می‌کند.
-- اگر کامپیوتر بیش از ۱۲۰ روز روشن نشود، باید یک بار `backfill --refresh` اجرا شود.
-- سهم‌های حذف‌شده یک بار با `collector.py past-shares` اضافه شده‌اند، ولی سهمی که بازارش بسته شده با آخرین قیمت می‌ماند و حدود ۱۰۰ سهم خارج از دیده‌بان فقط هنگام جبران روزهای از دست‌رفته به‌روز می‌شوند.
-- در عکس روزانه، ارزش ریالی جریان حقیقی/حقوقی خالی است (فقط حجم و تعداد)؛ روزهایی که از تاریخچه پر می‌شوند ارزش دقیق دارند.
+Known limitations:
+- Fipiran publishes some NAVs a day or two late; the system keeps retrying until those days are complete.
+- If the computer is not turned on for more than 120 days, `backfill --refresh` must be run once.
+- Delisted stocks were added once with `collector.py past-shares`, but a stock whose market has closed stays at its last price, and about 100 stocks outside the watchlist are updated only when missed days are being filled in.
+- In the daily snapshot, the rial value of real/legal-entity flow is empty (only volume and counts); days filled in from history have the exact value.
 
-### داده بنیادی (EPS و P/E)
+### Fundamental data (EPS and P/E)
 
-`collector.py daily` هر روز EPS و P/E دیده‌بان بازار را در جدول `fundamentals_seen` ذخیره می‌کند. ستون `seen_on` روز واقعی دریافت است و سیگنال روز t فقط از ردیف‌هایی با `seen_on <= t` می‌تواند استفاده کند.
+Every day `collector.py daily` stores the market watch's EPS and P/E in the `fundamentals_seen` table. The `seen_on` column is the actual day of retrieval, and a signal on day t may only use rows with `seen_on <= t`.
 
-- **سابقه موجود:** تاریخچه فقط از اولین اجرای همین کد شروع می‌شود، چون TSETMC فقط مقدار امروز را می‌دهد. روز از دست‌رفته هم بعداً پر نمی‌شود.
-- **آزمون P/E:** با این جدول فعلاً شدنی نیست. یا به منبع تاریخچه واقعی نیاز دارد، یا به چند سال جمع‌آوری. کدال رایگان است و زمان انتشار هر صورت مالی را دارد، ولی جمع‌کننده آن هنوز ساخته نشده است.
-- **معنی EPS:** سود ۱۲ ماه گذشته از آخرین صورت مالی. در نمونه ۱۳ نمادی، ۸ نماد با کدال خواند، ۳ نماد نخواند (هر سه با افزایش سرمایه تازه) و ۲ نماد قابل بررسی نبود.
+- **Available history:** the history starts only from the first run of this code, because TSETMC provides only today's value. A missed day is not back-filled later.
+- **P/E test:** not feasible with this table for now. It needs either a source of real history or several years of collection. Codal is free and has the publication time of each financial statement, but its collector has not been built yet.
+- **Meaning of EPS:** trailing 12-month profit from the latest financial statement. In a sample of 13 symbols, 8 matched Codal, 3 did not (all three with a recent capital increase) and 2 could not be checked.
 
-جزئیات: [`docs/fundamentals_findings.md`](docs/fundamentals_findings.md)
+Details: [`docs/fundamentals_findings.md`](docs/fundamentals_findings.md)
 
 ---
 
-## 📐 قیمت تعدیل‌شده و موتور بک‌تست (فاز ۲)
+## 📐 Adjusted prices and backtest engine (phase 2)
 
-| فایل | کار |
+| File | Purpose |
 |---|---|
-| `adjust.py` | ساخت جدول `price_adj`: قیمت تعدیل‌شده بابت سود نقدی و افزایش سرمایه + تشخیص صف خرید/فروش |
-| `backtest.py` | موتور بک‌تست با قواعد بورس تهران |
+| `adjust.py` | Builds the `price_adj` table: prices adjusted for cash dividends and capital increases, plus buy/sell queue detection |
+| `backtest.py` | Backtest engine with Tehran Stock Exchange rules |
 
-**تعدیل قیمت:** بورس برای هر روز «قیمت دیروز» مرجع را منتشر می‌کند. در روز مجمع یا افزایش سرمایه، این عدد از قیمت پایانی آخرین روز دارای معامله کمتر است؛ نسبت این دو، ضریب تعدیل آن روز است. روز بدون معامله سری را تکان نمی‌دهد: قیمت ۱۰۰۰ ریالی پیش از اولین معامله قیمت نیست، و تغییر قیمت مرجع در زمان توقف به روز بازگشایی می‌رسد. ضرب تجمعی ضرایب، قیمت خام را به سری «بازده کل» (با سود نقدی بازسرمایه‌گذاری‌شده) تبدیل می‌کند. این جدول بعد از هر اجرای `collector.py daily` خودکار بازسازی می‌شود.
+**Price adjustment:** for every day the exchange publishes a reference "yesterday price". On the day of a shareholders' meeting or a capital increase this number is lower than the closing price of the last day with trades; the ratio of the two is that day's adjustment factor. A day with no trades does not move the series: a price of 1000 rials before the first trade is not a price, and a reference price change during a halt is applied on the reopening day. Multiplying the factors cumulatively turns the raw price into a "total return" series (with cash dividends reinvested). This table is rebuilt automatically after every `collector.py daily` run.
 
-**قواعد موتور بک‌تست:**
-- سیگنال روز t، روز t+1 اجرا می‌شود (بدون نگاه به آینده).
-- خرید و فروش با میانگین وزنی قیمت روز (ارزش معاملات ÷ حجم) به‌علاوه لغزش قیمت (پیش‌فرض ۰٫۱٪).
-- روز صف خرید، خرید ممکن نیست؛ روز صف فروش، فروش ممکن نیست؛ روز بدون معامله هیچ‌کدام. سفارش منتظر می‌ماند و روزهای بعد دوباره امتحان می‌شود.
-- هر سفارش حداکثر ۱۰٪ ارزش معاملات آن روز نماد را پر می‌کند (نمادهای کم‌حجم نمی‌توانند سفارش بزرگ را جذب کنند).
-- کارمزد جداگانه برای سهام، صندوق سهامی، صندوق کالایی (طلا/نقره) و صندوق درآمد ثابت.
-- امکان سود روزشمار برای پول نقد (مثلاً معادل صندوق درآمد ثابت).
-- گزارش بازده به ریال و به دلار آزاد، در کنار شاخص کل، دلار و طلای ۱۸ عیار.
+**Backtest engine rules:**
+- A signal on day t is executed on day t+1 (no look-ahead).
+- Buys and sells happen at the day's volume-weighted average price (traded value ÷ volume) plus price slippage (default 0.1%).
+- On a buy-queue day buying is impossible; on a sell-queue day selling is impossible; on a day with no trades neither is. The order waits and is retried on later days.
+- Each order fills at most 10% of the symbol's traded value that day (low-volume symbols cannot absorb a large order).
+- Separate fees for stocks, equity funds, commodity funds (gold/silver) and fixed-income funds.
+- Daily interest on cash is supported (for example equal to a fixed-income fund).
+- Returns are reported in rials and in free-market dollars, next to the total index, the dollar and 18-karat gold.
 
-نرخ‌های پیش‌فرض کارمزد (قابل تغییر در `DEFAULT_FEES`؛ با کارگزاری خود تطبیق دهید):
+Default fee rates (changeable in `DEFAULT_FEES`; check them with your broker):
 
-| نوع | خرید | فروش |
+| Type | Buy | Sell |
 |---|---|---|
-| سهام | ۰٫۳۷۱۲٪ | ۰٫۸۸۱۲٪ (شامل ۰٫۵٪ مالیات) |
-| صندوق سهامی/اهرمی/مختلط | ۰٫۱۱۶٪ | ۰٫۱۸۷۵٪ |
-| صندوق طلا/نقره/کالایی | ۰٫۱۲٪ | ۰٫۱۲٪ |
-| صندوق درآمد ثابت | ۰٫۰۳۷۵٪ | ۰٫۰۳۷۵٪ |
+| Stocks | 0.3712% | 0.8812% (includes 0.5% tax) |
+| Equity / leveraged / mixed funds | 0.116% | 0.1875% |
+| Gold / silver / commodity funds | 0.12% | 0.12% |
+| Fixed-income funds | 0.0375% | 0.0375% |
 
-آزمایش موتور با «خرید و نگهداری» یک نماد:
+Trying the engine with buy-and-hold of one symbol:
 
 ```bash
 .venv\Scripts\python.exe backtest.py عیار --start 2021-03-21
 ```
 
-محدودیت‌ها:
-- شاخص کل سود نقدی را شامل می‌شود، ولی قابل خرید نیست و هزینه صندوق در آن نیست.
-- تشخیص صف فقط روزهایی را می‌گیرد که کل روز با یک قیمت معامله شده؛ صف‌هایی که بخشی از روز باز شده‌اند، قابل معامله فرض می‌شوند.
-- دامنه نوسان تاریخی ذخیره نشده؛ قفل شدن نماد از روی خود داده‌ها تشخیص داده می‌شود.
-- حدود ۴۰ صندوق در فیپیران نیستند؛ نوع آن‌ها از نام و ISIN بورس خوانده می‌شود (`IRTK` کالایی، «درآمد ثابت» یا پسوند «-د» و «ثابت» درآمد ثابت). صندوقی با نام نامتعارف ممکن است در دسته سهامی بماند.
+Limitations:
+- The total index includes cash dividends, but it cannot be bought and has no fund costs.
+- Queue detection only catches days where the whole day traded at a single price; queues that opened for part of the day are assumed tradable.
+- The historical price limit (daily range) is not stored; a symbol being locked is inferred from the data itself.
+- About 40 funds are not on Fipiran; their type is read from the exchange name and ISIN (`IRTK` commodity; "درآمد ثابت" or the suffix "-د" and "ثابت" fixed income). A fund with an unusual name may stay in the equity category.
 
 ---
 
-## 🔬 آزمون سیگنال‌ها (فاز ۳)
+## 🔬 Signal testing (phase 3)
 
-`research.py` همه سیگنال‌ها را روی دو دوره جدا (طراحی ۱۳۹۳ تا ۱۳۹۹، آزمون ۱۳۹۹ تا ۱۴۰۵) با کارمزد، لغزش قیمت و قفل صف‌های کل بازار آزمایش می‌کند:
+`research.py` tests all signals on two separate periods (design: 1393 to 1399, test: 1399 to 1405 in the Iranian calendar, roughly 2014 to 2020 and 2020 to 2026) with fees, price slippage and market-wide queue locks:
 
 ```bash
 .venv\Scripts\python.exe research.py
 ```
 
-نتایج و جمع‌بندی: [`docs/phase3_findings.md`](docs/phase3_findings.md)
+Results and conclusions: [`docs/phase3_findings.md`](docs/phase3_findings.md)
 
 ---
 
-## 🌍 طلای جهانی
+## 🌍 Global gold
 
-`globalgold.py` داده‌های جهانی طلا را از Yahoo Finance، خزانه‌داری آمریکا (بازده واقعی) و CFTC (گزارش COT) می‌گیرد؛ همه رایگان و بدون کلید API. `collector.py daily` آن‌ها را هر بار به‌روز می‌کند. دستورها:
+`globalgold.py` fetches global gold data from Yahoo Finance, the US Treasury (real yield) and the CFTC (COT report); all free and without an API key. `collector.py daily` updates them each time. Commands:
 
 ```bash
-.venv\Scripts\python.exe collector.py global   # دریافت کامل تاریخچه داده‌های جهانی (یک بار، حدود یک دقیقه)
-.venv\Scripts\python.exe globalgold.py         # گزارش آزمون سیگنال‌ها
+.venv\Scripts\python.exe collector.py global   # full download of global data history (once, about one minute)
+.venv\Scripts\python.exe globalgold.py         # signal test report
 ```
 
-نتایج و جمع‌بندی: [`docs/global_gold_findings.md`](docs/global_gold_findings.md)
+Results and conclusions: [`docs/global_gold_findings.md`](docs/global_gold_findings.md)
 
 ---
 
-## 💵 دلار آزاد
+## 💵 Free-market USD
 
-`freeusd.py` نرخ نیما و سنا را از TGJU، تورم ماهانه را از بانک مرکزی، شاخص قیمت مرکز آمار را از صندوق بین‌المللی پول (DBnomics) و تورم آمریکا را از BLS می‌گیرد؛ همه رایگان و بدون کلید API. `collector.py daily` و `collector.py global` آن‌ها را هم به‌روز می‌کنند. دستور گزارش:
+`freeusd.py` fetches the NIMA and Sana rates from TGJU, monthly inflation from the Central Bank, the Statistical Centre's price index from the IMF (DBnomics) and US inflation from the BLS; all free and without an API key. `collector.py daily` and `collector.py global` update them too. Report command:
 
 ```bash
-.venv\Scripts\python.exe freeusd.py            # گزارش آزمون سیگنال‌های دلار
+.venv\Scripts\python.exe freeusd.py            # dollar signal test report
 ```
 
-نتایج و جمع‌بندی: [`docs/free_usd_findings.md`](docs/free_usd_findings.md)
+Results and conclusions: [`docs/free_usd_findings.md`](docs/free_usd_findings.md)
 
 ---
 
-## 🎯 انتخاب سهم
+## 🎯 Stock selection
 
-`stockpick.py` ده عامل قیمتی و جریان پول را روی ۱۵۰ سهم نقدشونده، با کارمزد، لغزش قیمت و صف، در دو دوره جدا آزمون می‌کند. فهرست سهم فقط برای قاعده‌ای چاپ می‌شود که در دوره آزمون تأیید شده باشد؛ فعلاً هیچ قاعده‌ای تأیید نشده است.
+`stockpick.py` tests ten price and money-flow factors on 150 liquid stocks, with fees, price slippage and queues, on two separate periods. A stock list is printed only for a rule that was confirmed in the test period; for now no rule has been confirmed.
 
 ```bash
-.venv\Scripts\python.exe stockpick.py          # آزمون کامل (حدود ۲ دقیقه)
-.venv\Scripts\python.exe stockpick.py today    # آزمون، و فهرست امروز اگر قاعده‌ای تأیید شده باشد
+.venv\Scripts\python.exe stockpick.py          # full test (about 2 minutes)
+.venv\Scripts\python.exe stockpick.py today    # test, plus today's list if a rule has been confirmed
 ```
 
-نتایج و جمع‌بندی: [`docs/stock_selection_findings.md`](docs/stock_selection_findings.md)
+Results and conclusions: [`docs/stock_selection_findings.md`](docs/stock_selection_findings.md)
 
 ---
 
-## ⚖️ جابه‌جایی صندوق طلا و باند متعادل‌سازی
+## ⚖️ Gold fund switching and the rebalancing band
 
-`structural.py` جابه‌جایی بین صندوق‌های طلا با حباب (تأیید نشد) و زمان متعادل‌سازی سبد ۵۰/۵۰ را آزمون می‌کند. داشبورد فاصله سبد با هدف را با باند ۲۰ واحدی مقایسه می‌کند و پول جدید یا برداشت را بین دسته‌ها تقسیم می‌کند.
+`structural.py` tests switching between gold funds based on premium (not confirmed) and the timing of rebalancing a 50/50 portfolio. The dashboard compares the portfolio's gap to target with a 20-point band and splits new money or a withdrawal across categories.
 
 ```bash
 .venv\Scripts\python.exe structural.py
 ```
 
-نتایج و بررسی نظر هوش مصنوعی دیگر: [`docs/external_review.md`](docs/external_review.md)
+Results and the review by another AI: [`docs/external_review.md`](docs/external_review.md)
 
 ---
 
-## 🏦 بازده اسناد خزانه
+## 🏦 Treasury bill yields
 
-`treasury.py` بازده تا سررسید اخزا را از قیمت‌های دارای معامله حساب می‌کند و در `bill_yields` (هر ورقه) و `bill_yield_daily` (میانه روزانه) نگه می‌دارد. `collector.py daily` آن را به‌روز می‌کند و ردیف اوراق سررسیدشده می‌ماند. این سری فقط برای زمینه است و سیگنال نیست.
+`treasury.py` computes the yield to maturity of treasury bills (اخزا) from prices that had trades and keeps it in `bill_yields` (each bill) and `bill_yield_daily` (daily median). `collector.py daily` updates it and the rows of matured bills are kept. This series is for context only and is not a signal.
 
 ```bash
-.venv\Scripts\python.exe collector.py bills     # فقط به‌روزرسانی بازده اوراق
-.venv\Scripts\python.exe treasury.py             # گزارش توصیفی در برابر شاخص کل
+.venv\Scripts\python.exe collector.py bills     # update bill yields only
+.venv\Scripts\python.exe treasury.py             # descriptive report against the total index
 ```
 
-نتایج و محدودیت‌ها: [`docs/treasury_findings.md`](docs/treasury_findings.md)
+Results and limitations: [`docs/treasury_findings.md`](docs/treasury_findings.md)
